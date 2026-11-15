@@ -1,0 +1,40 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/burrow/burrow_main.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/burrow/burrow_map.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/burrow/burr.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/burrow/grub.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/burrow/grub_rig.gd" id="5"]
+[ext_resource type="Script" path="res://scripts/burrow/burrow_fx.gd" id="6"]
+
+[node name="BurrowLab" type="Node2D"]
+script = ExtResource("1")
+
+[node name="World" type="Node2D" parent="."]
+position = Vector2(96, 46)
+
+[node name="Map" type="Node2D" parent="World"]
+script = ExtResource("2")
+
+[node name="Items" type="Node2D" parent="World"]
+
+[node name="Burr" type="Node2D" parent="World/Items"]
+script = ExtResource("3")
+
+[node name="Grub" type="Node2D" parent="World"]
+script = ExtResource("4")
+
+[node name="Rig" type="Node2D" parent="World/Grub"]
+script = ExtResource("5")
+
+[node name="Fx" type="Node2D" parent="World"]
+z_index = 20
+script = ExtResource("6")
+
+[node name="Debug" type="Node2D" parent="World"]
+z_index = 30
+
+[node name="Camera" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+
+[node name="Hud" type="CanvasLayer" parent="."]

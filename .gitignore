@@ -1,0 +1,7 @@
+# Godot 4 editor cache and imported data (regenerated on open)
+.godot/
+*.translation
+
+# Exports and local settings
+export_presets.cfg
+*.tmp
