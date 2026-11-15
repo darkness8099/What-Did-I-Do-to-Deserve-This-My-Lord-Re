@@ -8,7 +8,8 @@
 
 ![Godot](https://img.shields.io/badge/Godot-4.7.2-478CBF?style=flat-square&logo=godotengine&logoColor=white)
 ![Language](https://img.shields.io/badge/Language-GDScript-859C54?style=flat-square)
-![Stage](https://img.shields.io/badge/Stage-Early_Prototype-D9A441?style=flat-square)
+[![License](https://img.shields.io/github/license/darkness8099/What-Did-I-Do-to-Deserve-This-My-Lord-Re?style=flat-square)](https://github.com/darkness8099/What-Did-I-Do-to-Deserve-This-My-Lord-Re/blob/main/LICENSE)
+![Status](https://img.shields.io/badge/Status-%E5%BC%80%E5%8F%91%E4%B8%AD-D9A441?style=flat-square)
 
 [🖼️ 画面一瞥](#preview) · [🎮 运行与操作](#play) · [🧱 实验笔记](#notes) · [🌱 关于 Re](#about-re)
 
