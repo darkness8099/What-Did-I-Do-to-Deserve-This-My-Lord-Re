@@ -120,6 +120,8 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 | `burrow_main.gd` | 场景接线、演示、输入、镜头与界面 |
 | `burrow_selftest.gd` | 行为检查与截图脚本 |
 
+泥胎造型预览位于 `scripts/mudling/`：`mudling_look.gd` 负责三个阶段的绘制，`mudling_preview.gd` 负责预览场景；静帧在 `deliverables/mudling_preview/`。
+
 以下命令在项目根目录执行，`godot` 代表本机 Godot 可执行文件；未加入 PATH 时请替换为实际路径。
 
 ```sh
@@ -140,6 +142,9 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 
 # 运行上一轮动画实验
  godot --path . res://scenes/creature_lab.tscn
+
+# 泥胎（暂定名）三阶段造型预览：只看造型，没有动作与生态逻辑
+ godot --path . res://scenes/mudling_preview.tscn
 ```
 
 地下地图截图位于 `deliverables/burrow_screenshots/`；上一轮截图和动作分镜分别位于 `deliverables/screenshots/` 与 `deliverables/keyframe_sheets/`。
