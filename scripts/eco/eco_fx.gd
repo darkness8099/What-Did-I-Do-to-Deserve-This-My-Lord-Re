@@ -9,12 +9,14 @@ const C_LINE := Color("17100f")
 var _motes: Array[Dictionary] = []
 var _rings: Array[Dictionary] = []
 var _chips: Array[Dictionary] = []
+var _drifts: Array[Dictionary] = []
 
 
 func clear() -> void:
 	_motes.clear()
 	_rings.clear()
 	_chips.clear()
+	_drifts.clear()
 	queue_redraw()
 
 
@@ -28,15 +30,22 @@ func ring(at: Vector2, color: Color, r0: float, r1: float, duration := 0.3) -> v
 	_rings.append({"at": at, "col": color, "r0": r0, "r1": r1, "dur": duration, "t": 0.0})
 
 
-func chips(at: Vector2, color: Color) -> void:
-	for i in 7:
+## Nutrient leaving the loop for the floating pool: pale motes that rise and fade out.
+func drift(at: Vector2, count: int) -> void:
+	for i in count:
+		_drifts.append({"p": at + Vector2(randf_range(-8.0, 8.0), randf_range(-4.0, 4.0)), "t": -0.12 * i,
+			"phase": randf() * TAU})
+
+
+func chips(at: Vector2, color: Color, count := 7) -> void:
+	for i in count:
 		var a := randf() * TAU
 		_chips.append({"p": at, "v": Vector2(cos(a), sin(a)) * randf_range(40.0, 110.0), "t": 0.0,
 			"r": randf_range(2.0, 4.0), "col": color.lightened(randf() * 0.15)})
 
 
 func advance(delta: float) -> void:
-	if _motes.is_empty() and _rings.is_empty() and _chips.is_empty():
+	if _motes.is_empty() and _rings.is_empty() and _chips.is_empty() and _drifts.is_empty():
 		return
 	for m in _motes:
 		m.t += delta
@@ -53,6 +62,9 @@ func advance(delta: float) -> void:
 		c.v *= pow(0.02, delta)
 		c.p += c.v * delta
 	_chips = _chips.filter(func(c: Dictionary) -> bool: return c.t < 0.4)
+	for d in _drifts:
+		d.t += delta
+	_drifts = _drifts.filter(func(d: Dictionary) -> bool: return d.t < 1.2)
 	queue_redraw()
 
 
@@ -66,6 +78,14 @@ func _mote_pos(m: Dictionary, t: float) -> Vector2:
 
 
 func _draw() -> void:
+	for d in _drifts:
+		if d.t < 0.0:
+			continue
+		var f: float = d.t / 1.2
+		var p: Vector2 = d.p + Vector2(6.0 * sin(d.phase + f * 7.0), -46.0 * f)
+		var a := (1.0 - f) * minf(f * 6.0, 1.0)
+		draw_circle(p, 3.6, Color(0.09, 0.06, 0.06, 0.5 * a))
+		draw_circle(p, 2.6, Color(0.95, 0.92, 0.78, 0.8 * a))
 	for c in _chips:
 		draw_circle(c.p, c.r, Color(c.col, 1.0 - c.t / 0.4))
 	for r in _rings:

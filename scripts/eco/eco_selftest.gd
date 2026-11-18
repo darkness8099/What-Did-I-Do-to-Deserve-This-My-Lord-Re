@@ -1,13 +1,16 @@
 extends RefCounted
-## Headless checks for the minimal ecology slice. Run with:
-##   godot --headless --path . res://scenes/eco_lab.tscn -- --selftest
-## It calls the pure rules directly, then drives the real scene with fixed time steps and
-## checks invariants every frame. It cannot judge how anything looks.
+## Headless checks for the ecology test. Run with:
+##   godot --headless --path . --fixed-fps 60 res://scenes/eco_lab.tscn -- --selftest
+## It calls the pure rules directly, drives single slime and plant nodes on small test
+## grids, then drives the real scene with fixed time steps and checks invariants every
+## frame. It cannot judge how anything looks.
 
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Eco := preload("res://scripts/eco/eco_spec.gd")
 const Rules := preload("res://scripts/eco/eco_rules.gd")
 const Grid := preload("res://scripts/eco/eco_grid.gd")
+const Slime := preload("res://scripts/eco/slime.gd")
+const Plant := preload("res://scripts/eco/plant.gd")
 
 var _checks := 0
 var _fails := 0
@@ -35,6 +38,9 @@ func run(main: Node) -> int:
 	_rules_movement()
 	_rules_ecology()
 	_rules_scatter()
+	_rules_life()
+	_slime_node()
+	_plant_node()
 	_scene(main)
 	print("[eco-selftest] %d checks, %d failures" % [_checks, _fails])
 	return _fails
@@ -133,6 +139,131 @@ func _rules_scatter() -> void:
 		"no soil within three rings: leftovers go to the floating pool with amount and source")
 
 
+func _rules_life() -> void:
+	# HP: one point every second completed move.
+	var hp := Eco.HP_INITIAL
+	var moves := 0
+	var trace: Array[int] = []
+	for i in 6:
+		var h := Rules.move_hp(hp, moves)
+		hp = h.hp
+		moves = h.moves
+		trace.append(hp)
+	_check(trace == [16, 15, 15, 14, 14, 13], "walking costs 1 HP every 2 completed moves (%s)" % [trace])
+
+	_check(Rules.crawler_fate(2, 2, false) == "bud" and Rules.crawler_fate(3, 3, false) == "live"
+		and Rules.crawler_fate(2, 1, false) == "live", "buds only when HP <= 2 and carrying >= 2")
+	_check(Rules.crawler_fate(1, 3, true) == "live" and Rules.crawler_fate(0, 3, true) == "starve",
+		"a cell that already holds a bud or flower: keeps crawling, starves if HP runs out there")
+	_check(Rules.crawler_fate(0, 1, false) == "starve" and Rules.crawler_fate(0, 2, false) == "bud",
+		"out of HP: starves with less than 2, buds with 2 or more")
+
+	var g := _grid(["#######", "#.....#", "#.....#", "#..o..#", "#.....#", "#.....#", "#######"],
+		["0000000", "0900000", "0000000", "0000000", "0000000", "0000000", "0000000"])
+	var none := Rules.plant_draw(Vector2i(3, 3), 1, g)
+	var got := Rules.plant_draw(Vector2i(3, 3), 2, g)
+	_check(none == Vector2i(-1, -1) and got == Vector2i(1, 1) and g.nutrient(Vector2i(1, 1)) == 8,
+		"a plant draws 1 point from soil inside its radius only")
+	g = _grid(["#######", "#.....#", "#.....#", "#..o..#", "#.....#", "#.....#", "#######"],
+		["0000000", "0900000", "0000000", "0000000", "0000100", "0000000", "0000000"])
+	_check(Rules.plant_draw(Vector2i(3, 3), 2, g) == Vector2i(4, 4), "a plant draws from the nearest ring first")
+
+	var o11 := Rules.offspring(11)
+	var o8 := Rules.offspring(8)
+	var o20 := Rules.offspring(20)
+	_check(o11.count == 5 and o11.spent == 10 and o11.left == 1 and o8.count == 4 and o8.left == 0
+		and o20.count == 5 and o20.left == 10, "offspring = min(5, collected / 2); the rest is reported as left over")
+
+
+# ------------------------------------------------------------------ single nodes
+
+func _slime_node() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	# Walled in: it never completes a move, so it never loses HP.
+	var g := _grid(["###", "#o#", "###"], ["000", "000", "000"])
+	var s := Node2D.new()
+	s.set_script(Slime)
+	s.setup(g, rng, 1, Vector2i(1, 1), Vector2i.RIGHT, 0)
+	for i in 600:
+		s.advance(1.0 / 60.0)
+	_check(s.hp == Eco.HP_INITIAL and s.total_moves == 0, "standing still costs no HP")
+	s.free()
+
+	# A barren corridor: it loses 1 HP every 2 moves, and absorbing heals 1 (capped).
+	g = _grid(["#######", "#ooooo#", "#######"], ["0000000", "0000000", "0000000"])
+	s = Node2D.new()
+	s.set_script(Slime)
+	s.setup(g, rng, 2, Vector2i(1, 1), Vector2i.RIGHT, 0)
+	var at_moves: Dictionary = {}
+	s.arrived.connect(func(x: Node2D) -> void: at_moves[x.total_moves] = x.hp)
+	for i in 60 * 21:
+		s.advance(1.0 / 60.0)
+	_check(at_moves.get(10, -1) == 11 and at_moves.get(20, -1) == 6, "barren corridor: HP 11 after 10 moves, 6 after 20")
+	s.free()
+
+	g = _grid(["#######", "#.....#", "#ooooo#", "#######"], ["0000000", "0999990", "0000000", "0000000"])
+	s = Node2D.new()
+	s.set_script(Slime)
+	s.setup(g, rng, 3, Vector2i(1, 2), Vector2i.RIGHT, 0)
+	s.hp = Eco.HP_MAX
+	var top := [0]
+	var absorbed := [0]
+	s.ecology_done.connect(func(_x: Node2D, r: Dictionary) -> void: absorbed[0] += 1 if r.action == "absorb" else 0)
+	s.arrived.connect(func(x: Node2D) -> void: top[0] = maxi(top[0], x.hp))
+	for i in 60 * 9:
+		s.advance(1.0 / 60.0)
+	_check(absorbed[0] >= 2 and top[0] == Eco.HP_MAX, "absorbing heals 1 HP, never above the maximum (%d absorbs)" % absorbed[0])
+	s.free()
+
+
+func _plant_node() -> void:
+	var layout: Array[String] = ["#########", "#.......#", "#.......#", "#.......#", "#...o...#", "#.......#", "#.......#", "#.......#", "#########"]
+	var c := Vector2i(4, 4)
+
+	# Plenty of soil around: 6 draws take a bud from 2 to 8 and it blooms.
+	var g := _grid(layout, ["000000000", "000000000", "000000000", "000900000", "000000000", "000000000", "000000000", "000000000", "000000000"])
+	var p := Node2D.new()
+	p.set_script(Plant)
+	p.setup(g, c, 2, 0.0, 2)
+	var bloom_tick := [-1]
+	p.bloomed.connect(func(x: Node2D) -> void: bloom_tick[0] = x.ticks)
+	for i in 6:
+		p.advance(Eco.STAGE_TICK)
+	_check(bloom_tick[0] == 6 and p.stage == Plant.Stage.FLOWER and p.hp == Eco.FLOWER_MAX_HP and p.collected == 8 and g.soil_total() == 3,
+		"bud draws 1 per second and blooms on reaching 8")
+
+	# The flower keeps drawing (7x7, capped at 11), loses 4 HP a second and releases on the sixth.
+	g.add_nutrient(Vector2i(1, 1), 20)
+	var released := [-1, -1]
+	p.released.connect(func(x: Node2D, had: int) -> void:
+		released[0] = x.ticks
+		released[1] = had)
+	for i in 8:
+		p.advance(Eco.STAGE_TICK)
+	_check(released[0] == 12 and released[1] == 11 and p.collected == 0 and not p.alive,
+		"flower collects up to 11, lasts six seconds, and hands its collected nutrient over once")
+	p.free()
+
+	# Nothing to draw: 1 HP lost every 3 seconds; at 0 HP it withers and hands over what it held.
+	g = _grid(layout, ["000000000", "000000000", "000000000", "000000000", "000000000", "000000000", "000000000", "000000000", "000000000"])
+	p = Node2D.new()
+	p.set_script(Plant)
+	p.setup(g, c, 3, 0.0, 3)
+	for i in 9:
+		p.advance(Eco.STAGE_TICK)
+	var hp_after_9: int = p.hp
+	var wither := [-1, -1]
+	p.withered.connect(func(x: Node2D, had: int) -> void:
+		wither[0] = x.ticks
+		wither[1] = had)
+	for i in 30:
+		p.advance(Eco.STAGE_TICK)
+	_check(hp_after_9 == Eco.BUD_MAX_HP - 3 and wither[0] == 30 and wither[1] == 3 and p.collected == 0,
+		"starving bud loses 1 HP every 3 seconds and withers at 0, handing over what it held once")
+	p.free()
+
+
 # ------------------------------------------------------------------ the real scene
 
 func _on_ecology(s: Node2D, res: Dictionary) -> void:
@@ -145,7 +276,7 @@ func _on_ecology(s: Node2D, res: Dictionary) -> void:
 				_frame_fail = "released onto soil that had no nutrient at %s" % c
 
 
-func _on_stepped(s: Node2D) -> void:
+func _on_arrived(s: Node2D) -> void:
 	_visited[s.cell] = true
 
 
@@ -153,25 +284,40 @@ func _hook(main: Node) -> void:
 	for s in main.slimes:
 		if not s.ecology_done.is_connected(_on_ecology):
 			s.ecology_done.connect(_on_ecology)
-			s.stepped.connect(_on_stepped)
+			s.arrived.connect(_on_arrived)
 
 
 func _frame_checks(main: Node) -> void:
 	if _frame_fail != "":
 		return
-	var total: int = main.grid.soil_total() + main.carried_total() + main.grid.pool_total
-	if total != main.initial_total:
-		_frame_fail = "nutrient not conserved at t=%.2f: %d vs %d" % [main.sim_time, total, main.initial_total]
+	if main.ledger_total() != main.initial_total:
+		_frame_fail = "nutrient not conserved at t=%.2f: %d vs %d" % [main.sim_time, main.ledger_total(), main.initial_total]
+	var limit: float = main.LANE + main.BROOD_SPREAD_MAX + 0.001
 	for s in main.slimes:
 		if not main.grid.is_open(Spec.cell_of(s.pos)):
 			_frame_fail = "slime %d logical position in a solid cell at t=%.2f" % [s.uid, main.sim_time]
-		if not main.grid.is_open(Spec.cell_of(s.visual_pos())):
+		if s.visible and not main.grid.is_open(Spec.cell_of(s.visual_pos())):
 			_frame_fail = "slime %d drawn inside a solid cell at t=%.2f" % [s.uid, main.sim_time]
 		var off: Vector2 = (s.visual_pos() - s.pos).abs()
-		if maxf(off.x, off.y) > main.LANE + 0.001:
-			_frame_fail = "slime %d visual shift too large" % s.uid
+		if maxf(off.x, off.y) > limit:
+			_frame_fail = "slime %d visual shift too large at t=%.2f" % [s.uid, main.sim_time]
 		if s.carried < 0 or s.carried > Eco.NUTRIENT_CAPACITY:
 			_frame_fail = "slime %d carries %d" % [s.uid, s.carried]
+		if not s.alive and s.carried != 0:
+			_frame_fail = "dead slime %d still carries %d" % [s.uid, s.carried]
+	var taken: Dictionary = {}
+	for p in main.plants:
+		if not p.alive:
+			if p.collected != 0:
+				_frame_fail = "finished plant at %s still holds %d" % [p.cell, p.collected]
+			continue
+		if taken.has(p.cell):
+			_frame_fail = "two buds or flowers in cell %s at t=%.2f" % [p.cell, main.sim_time]
+		taken[p.cell] = true
+		if not main.grid.is_open(p.cell):
+			_frame_fail = "plant in a solid cell %s" % p.cell
+		if p.stage == Plant.Stage.FLOWER and p.collected > Eco.FLOWER_MAX_COLLECT:
+			_frame_fail = "flower at %s holds %d" % [p.cell, p.collected]
 
 
 func _run(main: Node, seconds: float, step := 1.0 / 60.0) -> void:
@@ -192,26 +338,31 @@ func _scene(main: Node) -> void:
 	_check(not main.do_dig(Vector2i(1, 1)) and not main.do_dig(Vector2i(0, 0)) and not main.do_dig(Vector2i(6, 3)),
 		"cannot dig soil away from tunnels, rock, or an open cell")
 
-	var plain := Vector2i(11, 4)
+	var plain := Vector2i(1, 4)
 	_check(grid.nutrient(plain) == 0 and main.do_dig(plain) and main.slimes.is_empty() and grid.is_open(plain),
 		"digging soil without nutrient opens the cell and hatches nothing")
 
 	var rich := Vector2i(5, 2)         # 4 nutrient, next to the shaft cell (6, 2)
 	var before: int = grid.nutrient(rich)
 	_check(main.do_dig(rich) and main.slimes.size() == 1 and main.slimes[0].carried == 3 and before == 4
-		and grid.soil_total() + main.carried_total() + grid.pool_total == total,
+		and main.ledger_total() == total,
 		"digging soil with 4 nutrient hatches one slime carrying 3; the last point is scattered, nothing lost")
-	_check(main.slimes[0].cell == rich and grid.is_open(rich + main.slimes[0].dir), "the newborn sits in the dug cell and faces an open way")
+	_check(main.slimes[0].cell == rich and grid.is_open(rich + main.slimes[0].dir) and main.slimes[0].hp == Eco.HP_INITIAL,
+		"the newborn sits in the dug cell, faces an open way and has 16 HP")
 
-	# Free play with the scripted digs, checked every frame.
+	# The scripted demo, checked every frame, long enough for a full generation and more.
 	main.do_reset()
 	main.demo_on = true
 	_events.clear()
 	_visited.clear()
 	_watched.clear()
-	_run(main, 90.0)
-	_check(_frame_fail == "", "90 s of demo: conservation, positions and carried amounts hold every frame" + ("" if _frame_fail == "" else "  -> " + _frame_fail))
-	_check(main.slimes.size() >= 4, "several slimes are alive together (%d)" % main.slimes.size())
+	_run(main, 300.0)
+	_check(_frame_fail == "", "300 s of demo: ledger, positions, carried amounts and one plant per cell hold every frame" + ("" if _frame_fail == "" else "  -> " + _frame_fail))
+	var n: Dictionary = main.counts
+	_check(n.buds >= 1 and n.blooms >= 1 and n.broods >= 1 and n.born_brood >= 1,
+		"the whole cycle happens: buds %d, blooms %d, broods %d (%d newborns)" % [n.buds, n.blooms, n.broods, n.born_brood])
+	_check(n.starved >= 1, "some slimes starved (%d)" % n.starved)
+	_check(main.repro_spent == 2 * n.born_brood, "reproduction spent exactly 2 per newborn (%d for %d)" % [main.repro_spent, n.born_brood])
 
 	var absorbs := 0
 	var releases := 0
@@ -225,8 +376,9 @@ func _scene(main: Node) -> void:
 
 	var pace_ok := true
 	for s in main.slimes:
-		pace_ok = pace_ok and s.total_moves <= int(main.sim_time) + 1 and s.total_moves >= 60
-	_check(pace_ok, "pace is one cell per second (turning is inside the step, not extra)")
+		if s.alive:
+			pace_ok = pace_ok and s.total_moves <= int(s.age) + 1 and s.total_moves >= int(s.age - s.start_delay) - 2
+	_check(pace_ok, "pace is one cell per second for every living slime (turning is inside the step)")
 
 	var changed := 0
 	for y in grid.rows:
@@ -234,18 +386,21 @@ func _scene(main: Node) -> void:
 			var c := Vector2i(x, y)
 			if grid.is_soil(c) and grid.nutrient(c) != int(Eco.NUTRIENT[y][x]):
 				changed += 1
-	_check(changed > 0, "soil amounts changed through carrying (%d cells differ from the start)" % changed)
+	_check(changed > 0, "soil amounts changed through carrying and drawing (%d cells differ from the start)" % changed)
 
-	# Digging changes routes: open a new dead-end branch and see it get visited.
-	var branch := Vector2i(11, 4)
+	# Fast-forward sized steps from a fresh start must not break anything either.
+	main.do_reset()
+	main.demo_on = true
+	_frame_fail = ""
+	_run(main, 200.0, 0.27)
+	_check(_frame_fail == "" and main.counts.blooms >= 1, "fast-forward sized steps keep every invariant through the cycle" + ("" if _frame_fail == "" else "  -> " + _frame_fail))
+
+	# Digging a new branch while the cycle runs changes where slimes go.
+	var branch := Vector2i(1, 4)
 	_visited.clear()
 	_check(main.do_dig(branch), "can dig a new branch while slimes are moving")
-	_run(main, 120.0)
-	_check(_visited.has(branch) and _frame_fail == "", "a slime wandered into the newly dug branch")
-
-	# Large time steps (fast-forward) must not break anything.
-	_run(main, 40.0, 0.27)
-	_check(_frame_fail == "", "fast-forward sized steps keep every invariant" + ("" if _frame_fail == "" else "  -> " + _frame_fail))
+	_run(main, 150.0)
+	_check(_visited.has(branch) or main.count_alive() == 0, "a slime wandered into the newly dug branch (or none were left alive)")
 
 	main.do_reset()
 	var same := true
@@ -254,4 +409,5 @@ func _scene(main: Node) -> void:
 			var c := Vector2i(x, y)
 			var want: int = Spec.ROCK if Eco.LAYOUT[y][x] == "#" else (Spec.OPEN if Eco.LAYOUT[y][x] == "o" else Spec.SOIL)
 			same = same and grid.kind(c) == want and grid.nutrient(c) == (int(Eco.NUTRIENT[y][x]) if want == Spec.SOIL else 0)
-	_check(same and main.slimes.is_empty() and grid.pool_total == 0 and grid.soil_total() == total, "reset restores the map, the nutrient and removes every slime")
+	_check(same and main.slimes.is_empty() and main.plants.is_empty() and grid.pool_total == 0 and main.repro_spent == 0
+		and grid.soil_total() == total, "reset restores the map and the nutrient and removes every slime, bud and flower")

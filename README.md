@@ -122,14 +122,15 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 
 养分史莱姆的造型在 `scripts/slime/`（`slime_look.gd` 绘制三个阶段，`slime_preview.gd` 是造型预览）。
 
-最小生态循环试验在 `scripts/eco/`：
+生态循环试验在 `scripts/eco/`：
 
 | 文件 | 职责 |
 | --- | --- |
 | `eco_spec.gd` | 数值、地图与初始养分 |
 | `eco_grid.gd` | 在地下地图格子上增加每格养分与漂浮资源池账目 |
-| `eco_rules.gd` | 移动、吸放、散布三条纯规则 |
-| `slime.gd` | 史莱姆单位的逻辑与连续动画 |
+| `eco_rules.gd` | 移动、吸放、散布、衰弱、结苞、植物取养分、繁殖等纯规则 |
+| `slime.gd` | 爬行阶段的逻辑与连续动画（移动、HP、饿死） |
+| `plant.gd` | 花苞与花的逻辑与原地动画（取养分、开花、枯萎、繁殖） |
 | `eco_soil.gd` / `eco_fx.gd` | 土块养分显示与养分光点反馈 |
 | `eco_main.gd` | 场景接线、输入、演示与界面 |
 | `eco_selftest.gd` | 自动检查 |
@@ -160,7 +161,7 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 # 养分史莱姆（暂定名）三阶段造型预览
  godot --path . res://scenes/slime_preview.tscn
 
-# 最小生态循环试验：挖掘出生、直行转向、养分搬运
+# 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖
  godot --path . res://scenes/eco_lab.tscn
 
 # 生态试验的自动检查

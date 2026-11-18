@@ -31,7 +31,7 @@ const LIGHT := Vector2(-0.55, -0.83)   ## world direction towards the light
 
 var stage: int = Stage.CRAWL
 var nutrient := 1                 ## carried nutrient 0..3 (crawler): body size and back spots
-var vigor := 1.0                  ## 1 healthy .. 0 spent (crawler): a secondary cue only
+var vigor := 1.0                  ## 1 healthy .. 0 spent: a secondary cue only (all stages)
 var facing := 0.0                 ## radians, crawler heading
 var palette := "green"
 var silhouette := false           ## draw the bare outline shape in one flat colour
@@ -63,6 +63,13 @@ func visual_half_extent() -> Vector2:
 
 func _draw() -> void:
 	_pal = PALETTES[palette]
+	if stage != Stage.CRAWL and vigor < 1.0:
+		# Bud and flower fade towards a dull grey as they wither.
+		var dull: Dictionary = {}
+		for k: String in _pal:
+			var col: Color = _pal[k]
+			dull[k] = col.lerp(C_WEAK.darkened(0.15), 0.6 * (1.0 - clampf(vigor, 0.0, 1.0)))
+		_pal = dull
 	match stage:
 		Stage.BUD: _draw_bud()
 		Stage.FLOWER: _draw_flower()

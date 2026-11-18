@@ -1,5 +1,5 @@
 extends RefCounted
-## Pure rules of the minimal ecology slice. No nodes, no drawing, no time: every function
+## Pure rules of the ecology test. No nodes, no drawing, no time: every function
 ## takes what it needs and returns what happened, so the self-test can call them directly.
 
 const Eco := preload("res://scripts/eco/eco_spec.gd")
@@ -86,3 +86,44 @@ static func scatter(origin: Vector2i, amount: int, grid: RefCounted, source: Str
 		return got
 	grid.pool_deposit(amount, source)
 	return got
+
+
+## HP after one completed move. `moves` counts completed moves since the last HP cost.
+## Returns {"hp": int, "moves": int}.
+static func move_hp(hp: int, moves: int) -> Dictionary:
+	moves += 1
+	if moves >= Eco.HP_COST_EVERY_MOVES:
+		return {"hp": hp - Eco.HP_COST, "moves": 0}
+	return {"hp": hp, "moves": moves}
+
+
+## What a crawler becomes after a completed move: "bud", "starve" or "live".
+## `cell_has_plant`: only one bud or flower per cell; a weak slime on a taken cell keeps
+## crawling and may bud on a free cell later (or starve if its HP runs out first).
+static func crawler_fate(hp: int, carried: int, cell_has_plant: bool) -> String:
+	if hp <= Eco.BUD_HP_THRESHOLD and carried >= Eco.BUD_REQUIRED_NUTRIENT and not cell_has_plant:
+		return "bud"
+	if hp <= 0:
+		return "starve"
+	return "live"
+
+
+## Bud / flower: take 1 nutrient from the nearest soil holding some, ring by ring out to
+## `radius` (Chebyshev). Returns the cell drawn from, or (-1, -1) if there was none.
+static func plant_draw(pos: Vector2i, radius: int, grid: RefCounted) -> Vector2i:
+	for r in range(1, radius + 1):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var c := pos + Vector2i(dx, dy)
+				if grid.has_nutrient(c):
+					grid.add_nutrient(c, -1)
+					return c
+	return Vector2i(-1, -1)
+
+
+## Newborns from a flower that collected `collected`, and what is left over.
+static func offspring(collected: int) -> Dictionary:
+	var count := mini(Eco.SPAWN_MAX, collected / Eco.NUTRIENT_PER_SPAWN)
+	return {"count": count, "spent": count * Eco.NUTRIENT_PER_SPAWN, "left": collected - count * Eco.NUTRIENT_PER_SPAWN}

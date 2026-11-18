@@ -1,10 +1,13 @@
 extends RefCounted
-## Numbers and layout of the minimal ecology test (task ECO-001).
+## Numbers and layout of the ecology test (tasks ECO-001, ECO-002).
 ## Rules follow the mechanism baseline in PROJECT_STATE.md, taken from the old Unity
-## project's final code. Only this slice is live here:
+## project's final code, with the agreed fixes (bud takes over the carried nutrient
+## once; every exit path settles it exactly once). The whole life cycle is live:
 ##   dig nutrient soil -> slime is born -> walks straight, turns when blocked ->
-##   absorbs / releases nutrient with neighbouring soil -> soil amount and look change.
-## Not in this slice: HP and weakening, bud, flower, reproduction, predation, heroes.
+##   absorbs / releases nutrient with neighbouring soil, loses HP as it walks ->
+##   weak with enough nutrient: bud; out of HP without: starves ->
+##   bud draws nutrient from around it -> flower -> new slimes.
+## Not here: predation, heroes, magic.
 
 const STEP_SECONDS := 1.0            ## one cell per second, shown as continuous motion
 const NUTRIENT_CAPACITY := 3         ## most a slime carries
@@ -15,6 +18,41 @@ const ECOLOGY_COOLDOWN_MOVES := 2    ## completed moves between two absorb / rel
 const SPAWN_MAX_SOIL_NUTRIENT := 10  ## soil richer than this does not hatch a base slime
 const SCATTER_MAX_RING := 3          ## dig leftovers go to the nearest ring of soil, up to this far
 const HATCH_SECONDS := 0.7           ## pop-out animation before the first step
+
+# --- crawler HP (weakening). Counted only on completed moves; standing still costs nothing.
+const HP_INITIAL := 16
+const HP_MAX := 21
+const HP_COST := 1                   ## lost every HP_COST_EVERY_MOVES completed moves
+const HP_COST_EVERY_MOVES := 2
+const HP_HEAL_ON_ABSORB := 1         ## releasing does not heal
+
+# --- crawler -> bud, or starvation
+const BUD_HP_THRESHOLD := 2          ## HP at or below this ...
+const BUD_REQUIRED_NUTRIENT := 2     ## ... and carrying at least this: becomes a bud
+## Out of HP while carrying less: starves; what it carried goes to the floating pool.
+
+# --- bud (does not move, does not attack)
+const BUD_MAX_HP := 10
+const BUD_RADIUS := 2                ## draws from soil within this Chebyshev radius (5x5)
+const BUD_TO_FLOWER := 8             ## collected nutrient that makes it bloom
+const BUD_STARVE_TICKS := 3          ## ticks in a row with nothing drawn before it loses HP
+const BUD_HP_DECAY := 1
+
+# --- flower
+const FLOWER_MAX_HP := 21
+const FLOWER_RADIUS := 3             ## 7x7
+const FLOWER_MAX_COLLECT := 11
+const FLOWER_HP_DECAY := 4           ## every tick: a flower lasts about six seconds
+
+# --- reproduction, when the flower's HP runs out
+const SPAWN_MAX := 5
+const NUTRIENT_PER_SPAWN := 2        ## count = min(SPAWN_MAX, collected / NUTRIENT_PER_SPAWN)
+const SPAWN_DELAY_MAX := 2.0         ## each newborn waits random(0, this) seconds before moving
+## Where the leftover of a flower's collected nutrient goes (e.g. 11 collected, 5 born, 1 left).
+## Decided by the user on 2026-11-19: into the floating pool, like starving and withering.
+const REMAINDER_TO_POOL := true
+
+const STAGE_TICK := 1.0              ## bud and flower act once per second
 
 ## Neighbour order for absorbing (old code: up, down, left, right).
 const N4: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
@@ -45,7 +83,8 @@ const NUTRIENT: Array[String] = [
 	"00000000000000000",
 ]
 
-## Scripted digs of the built-in demo: seconds from start, cell.
+## Scripted digs of the built-in demo: seconds from start, cell. The later ones open fresh
+## soil after the first generation has drained the tunnels, the way a player would.
 const DEMO_DIGS: Array = [
 	[0.6, Vector2i(5, 3)],
 	[2.6, Vector2i(7, 5)],
@@ -53,4 +92,12 @@ const DEMO_DIGS: Array = [
 	[7.6, Vector2i(5, 2)],
 	[10.6, Vector2i(9, 5)],
 	[14.6, Vector2i(5, 5)],
+	[60.0, Vector2i(11, 4)],
+	[61.5, Vector2i(11, 3)],
+	[63.0, Vector2i(12, 3)],
+	[66.0, Vector2i(12, 2)],
+	[95.0, Vector2i(4, 5)],
+	[97.0, Vector2i(4, 6)],
+	[125.0, Vector2i(10, 5)],
+	[127.0, Vector2i(10, 6)],
 ]
