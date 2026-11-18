@@ -120,7 +120,21 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 | `burrow_main.gd` | 场景接线、演示、输入、镜头与界面 |
 | `burrow_selftest.gd` | 行为检查与截图脚本 |
 
-泥胎造型预览位于 `scripts/mudling/`：`mudling_look.gd` 负责三个阶段的绘制，`mudling_preview.gd` 负责预览场景；静帧在 `deliverables/mudling_preview/`。
+养分史莱姆的造型在 `scripts/slime/`（`slime_look.gd` 绘制三个阶段，`slime_preview.gd` 是造型预览）。
+
+最小生态循环试验在 `scripts/eco/`：
+
+| 文件 | 职责 |
+| --- | --- |
+| `eco_spec.gd` | 数值、地图与初始养分 |
+| `eco_grid.gd` | 在地下地图格子上增加每格养分与漂浮资源池账目 |
+| `eco_rules.gd` | 移动、吸放、散布三条纯规则 |
+| `slime.gd` | 史莱姆单位的逻辑与连续动画 |
+| `eco_soil.gd` / `eco_fx.gd` | 土块养分显示与养分光点反馈 |
+| `eco_main.gd` | 场景接线、输入、演示与界面 |
+| `eco_selftest.gd` | 自动检查 |
+
+试验中左键挖与通道相邻的土块；**Space** 自动演示，**R** 重置，**F** 快进，**P** 暂停，**G** 显示数值与格子，**Z** 切换显示尺寸。
 
 以下命令在项目根目录执行，`godot` 代表本机 Godot 可执行文件；未加入 PATH 时请替换为实际路径。
 
@@ -143,8 +157,14 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 # 运行上一轮动画实验
  godot --path . res://scenes/creature_lab.tscn
 
-# 泥胎（暂定名）三阶段造型预览：只看造型，没有动作与生态逻辑
- godot --path . res://scenes/mudling_preview.tscn
+# 养分史莱姆（暂定名）三阶段造型预览
+ godot --path . res://scenes/slime_preview.tscn
+
+# 最小生态循环试验：挖掘出生、直行转向、养分搬运
+ godot --path . res://scenes/eco_lab.tscn
+
+# 生态试验的自动检查
+ godot --headless --path . --fixed-fps 60 res://scenes/eco_lab.tscn -- --selftest
 ```
 
 地下地图截图位于 `deliverables/burrow_screenshots/`；上一轮截图和动作分镜分别位于 `deliverables/screenshots/` 与 `deliverables/keyframe_sheets/`。
