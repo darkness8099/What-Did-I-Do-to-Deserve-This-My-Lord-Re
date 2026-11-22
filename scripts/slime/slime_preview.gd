@@ -31,12 +31,8 @@ const ENTRIES: Array[Dictionary] = [
 	{"cell": Vector2i(2, 3), "stage": Look.Stage.BUD, "n": 0, "vigor": 1.0, "facing": 0.0, "text": "竖向花苞", "side": true},
 	{"cell": Vector2i(14, 3), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 1.0, "facing": -PI * 0.5, "text": "竖向爬行", "side": true},
 	{"cell": Vector2i(14, 5), "stage": Look.Stage.FLOWER, "n": 0, "vigor": 1.0, "facing": 0.0, "text": "竖向花", "side": true},
-	{"cell": Vector2i(2, 4), "stage": Look.Stage.CRAWL, "n": 0, "vigor": 1.0, "facing": 0.0, "text": "养分 0"},
-	{"cell": Vector2i(4, 4), "stage": Look.Stage.CRAWL, "n": 1, "vigor": 1.0, "facing": 0.0, "text": "养分 1"},
-	{"cell": Vector2i(6, 4), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 1.0, "facing": 0.0, "text": "养分 2"},
-	{"cell": Vector2i(8, 4), "stage": Look.Stage.CRAWL, "n": 3, "vigor": 1.0, "facing": 0.0, "text": "养分 3"},
-	{"cell": Vector2i(10, 4), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 1.0, "facing": 0.0, "text": "健康·养分 2"},
-	{"cell": Vector2i(12, 4), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 0.0, "facing": 0.0, "text": "虚弱·养分 2"},
+	{"cell": Vector2i(10, 4), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 1.0, "facing": 0.0, "text": "健康"},
+	{"cell": Vector2i(12, 4), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 0.0, "facing": 0.0, "text": "虚弱"},
 	{"cell": Vector2i(2, 6), "stage": Look.Stage.CRAWL, "n": 2, "vigor": 1.0, "facing": 0.0, "text": "剪影", "sil": true},
 	{"cell": Vector2i(4, 6), "stage": Look.Stage.BUD, "n": 0, "vigor": 1.0, "facing": 0.0, "text": "剪影", "sil": true},
 	{"cell": Vector2i(6, 6), "stage": Look.Stage.FLOWER, "n": 0, "vigor": 1.0, "facing": 0.0, "text": "剪影", "sil": true},
@@ -115,7 +111,7 @@ func _ready() -> void:
 	add_child(hud)
 	var title := _caption("养分史莱姆（暂定名）· 造型基线    1 格 = 64 px，默认游玩尺寸", Vector2(0, 8), Vector2(1280, 26), 17)
 	hud.add_child(title)
-	var hint := _caption("上：三个生命阶段    中：养分 0–3、健康与虚弱并排    下：纯剪影、换色示例    两侧竖井：竖向通道中的样子    [G] 边界   [Z] 尺寸   [Esc] 退出",
+	var hint := _caption("上：三个生命阶段    中：健康与虚弱并排    下：纯剪影、换色示例    两侧竖井：竖向通道中的样子    [G] 边界   [Z] 尺寸   [Esc] 退出",
 		Vector2(0, 684), Vector2(1280, 24), 14)
 	hint.add_theme_color_override("font_color", Color(0.78, 0.74, 0.7))
 	hud.add_child(hint)

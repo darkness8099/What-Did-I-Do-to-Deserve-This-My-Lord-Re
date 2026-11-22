@@ -17,6 +17,7 @@ extends Node2D
 ## CLI (after `--`): --map=small|gen, --map-seed=<n>, --cam=<x>,<y> (cells), --view=<0..3>,
 ##        --demo, --grid, --small, --zoom, --seed=<n>, --selftest, --log,
 ##        --quit-after=<s> (run the demo for s seconds of simulation, print the ledger, quit),
+##        --soil-stats (with --quit-after: also print how often soil changes look band),
 ##        --shots=<dir> (run the demo, save stills, quit; optional --shots-from=<s>,
 ##        --shots-step=<s>, --shots-count=<n>; default one per second for 30 s).
 
@@ -86,6 +87,8 @@ var _shot_count := 31
 var _selftest := false
 var _log := false
 var _quit_after := -1.0
+var _stats_on := false
+var _st := {}                       ## --soil-stats counters
 
 
 func _ready() -> void:
@@ -109,6 +112,8 @@ func _ready() -> void:
 			demo_on = true
 		elif a == "--log":
 			_log = true
+		elif a == "--soil-stats":
+			_stats_on = true
 		elif a.begins_with("--quit-after="):
 			_quit_after = float(a.trim_prefix("--quit-after="))
 			demo_on = true
@@ -171,6 +176,9 @@ func load_map(kind: String, seed := Eco.GEN_SEED) -> void:
 		for i in plan.size():
 			_demo_steps.append([0.6 + Eco.GEN_DEMO_DIG_EVERY * i, plan[i]])
 	initial_total = grid.soil_total()
+	if _stats_on:
+		_st = {"changes": 0, "sec": {}, "cells": {}}
+		grid.nutrient_changed.connect(_on_soil_stat)
 
 	_world = Node2D.new()
 	add_child(_world)
@@ -211,6 +219,78 @@ func load_map(kind: String, seed := Eco.GEN_SEED) -> void:
 func new_map() -> void:
 	load_map("gen", randi() % 1000000 + 1)
 	_say("新地图：种子 %d" % map_seed)
+
+
+# ------------------------------------------------------------------ measurement
+
+## Which look band an amount falls in, for --soil-stats: 0, then 1..9 split in three
+## (1-3, 4-6, 7-9), then 10..16, 17..20, 21+.
+static func _band(n: int) -> int:
+	if n <= 0:
+		return 0
+	if n <= 9:
+		return 1 + (n - 1) / 3
+	if n <= 16:
+		return 4
+	if n <= 20:
+		return 5
+	return 6
+
+
+## --soil-stats: count how often soil changes look band, per kind of boundary, per second
+## and per cell. Used to judge how busy any "soil changed" cue would be.
+func _on_soil_stat(c: Vector2i, old: int, new: int) -> void:
+	_st.changes += 1
+	var a := _band(old)
+	var b := _band(new)
+	if a == b:
+		return
+	var lo := mini(a, b)
+	var kind := "0|1" if lo == 0 else ("in-tier-1" if lo < 3 else ("9|10" if lo == 3 else ("16|17" if lo == 4 else "20|21")))
+	var sec := int(sim_time)
+	if not _st.sec.has(sec):
+		_st.sec[sec] = {}
+	_st.sec[sec][kind] = int(_st.sec[sec].get(kind, 0)) + 1
+	if kind != "in-tier-1":
+		var key := "%s@%d,%d" % [kind, c.x, c.y]
+		if not _st.cells.has(key):
+			_st.cells[key] = []
+		_st.cells[key].append(sim_time)
+
+
+func _print_soil_stats() -> void:
+	var kinds: Array[String] = ["0|1", "in-tier-1", "9|10", "16|17", "20|21"]
+	print("[soil] every nutrient change: %d in %.0f s" % [_st.changes, sim_time])
+	for k in kinds:
+		var total := 0
+		var peak := 0
+		var busy10 := 0
+		for sec: int in _st.sec:
+			var v: int = _st.sec[sec].get(k, 0)
+			total += v
+			peak = maxi(peak, v)
+		# busiest 10-second window
+		for start in range(0, int(sim_time)):
+			var w := 0
+			for d in 10:
+				if _st.sec.has(start + d):
+					w += int(_st.sec[start + d].get(k, 0))
+			busy10 = maxi(busy10, w)
+		print("[soil] boundary %-9s  total %4d   peak per second %3d   busiest 10 s %4d" % [k, total, peak, busy10])
+	# cells that cross the same tier boundary again within 5 s (a blinking cell)
+	var repeat := {}
+	var worst := {}
+	for key: String in _st.cells:
+		var kind := key.split("@")[0]
+		var times: Array = _st.cells[key]
+		var quick := 0
+		for i in range(1, times.size()):
+			if times[i] - times[i - 1] < 5.0:
+				quick += 1
+		if quick > 0:
+			repeat[kind] = int(repeat.get(kind, 0)) + 1
+		worst[kind] = maxi(int(worst.get(kind, 0)), times.size())
+	print("[soil] cells that crossed the same boundary again within 5 s: %s   most crossings on one cell: %s" % [repeat, worst])
 
 
 # ------------------------------------------------------------------ actions
@@ -259,14 +339,10 @@ func do_dig(c: Vector2i, quiet := false) -> bool:
 		if not quiet:
 			_say("养分 %d 的土块：史莱姆出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
 	elif had > 0 and not quiet:
-		_say("养分 %d 的土块过于肥沃，不出生基础史莱姆，养分散到周围" % had)
+		_say("养分 %d 的土块：不出生史莱姆（10–16 留给尚未制作的捕食者），养分散到周围" % had)
 	if leftover > 0:
-		var got := Rules.scatter(c, leftover, grid, "dig-leftover(%d,%d)" % [c.x, c.y])
-		for i in got.size():
-			var to_cell := got[i]
-			soil.hide_incoming(to_cell)
-			var to_px := Spec.center(to_cell) * Spec.CELL_PX
-			fx.mote(at, func() -> Vector2: return to_px, 0.5, func() -> void: soil.reveal(to_cell), 0.06 * i)
+		# Nothing flies: the soil around simply grows a little greener as the amounts land.
+		Rules.scatter(c, leftover, grid, "dig-leftover(%d,%d)" % [c.x, c.y])
 	return true
 
 
@@ -304,40 +380,13 @@ func _spawn(c: Vector2i, nutrient: int) -> void:
 	fx.ring(Spec.center(c) * Spec.CELL_PX, Color("bdec7c"), 8.0, 30.0, 0.4)
 
 
-## Pixel position of a slime for a mote in flight, or `fallback` once it is gone.
-## Motes hold a weak reference: a slime may root into a bud while a mote flies to it.
-func _px_of(ref: WeakRef, fallback: Vector2) -> Vector2:
-	var s: Node2D = ref.get_ref()
-	return s.position if s != null and s.is_inside_tree() else fallback
-
-
 func _on_ecology(s: Node2D, res: Dictionary) -> void:
 	var cells: Array[Vector2i] = res.cells
 	if _log:
 		print("[eco] t=%.2f slime %d at %s %s %s -> carries %d" % [sim_time, s.uid, s.cell, res.action, cells, res.carried])
-	if res.action == "absorb":
-		# The dot leaves the soil at once and flies to the slime; the back spot appears on arrival.
-		var c := cells[0]
-		var from: Vector2 = soil.dot_pos(c, grid.nutrient(c))
-		var now_carried: int = res.carried
-		fx.ring(from, Color("f8e68c"), 3.0, 12.0, 0.25)
-		var land := Spec.center(s.cell) * Spec.CELL_PX
-		var ref: WeakRef = weakref(s)
-		fx.mote(from, func() -> Vector2: return _px_of(ref, land), 0.45, func() -> void:
-			var live: Node2D = ref.get_ref()
-			if live != null and live.alive:
-				live.set_shown(now_carried, true)
-			fx.ring(_px_of(ref, land), Color("f8e68c"), 6.0, 20.0, 0.3))
-	elif res.action == "release":
-		# The spots leave the back at once; each point lands in its soil block a moment later.
-		s.set_shown(res.carried, false)
-		for i in cells.size():
-			var c := cells[i]
-			soil.hide_incoming(c)
-			var to_px: Vector2 = soil.dot_pos(c, grid.nutrient(c) - 1)
-			fx.mote(s.position, func() -> Vector2: return to_px, 0.45, func() -> void:
-				soil.reveal(c)
-				fx.ring(to_px, Color("f8e68c"), 3.0, 12.0, 0.25), 0.1 * i)
+	# No nutrient is shown in flight or on the body. The slime gulps; the soil it traded
+	# with slowly changes its own look.
+	s.set_shown(res.carried, res.action == "absorb")
 
 
 # ------------------------------------------------------------------ life cycle
@@ -377,16 +426,23 @@ func _make_bud(s: Node2D) -> void:
 	counts.buds += 1
 
 
-## Out of HP without enough nutrient: what it carried leaves for the floating pool.
+## Out of HP without enough nutrient: what it carried goes back into the soil around it.
 func _starve(s: Node2D) -> void:
 	var had: int = s.carried
-	grid.pool_deposit(had, "starvation(slime %d at %d,%d)" % [s.uid, s.cell.x, s.cell.y])
-	if had > 0:
-		fx.drift(s.position, had)
+	_return_to_soil(s.cell, s.position, had, "starvation(slime %d at %d,%d)" % [s.uid, s.cell.x, s.cell.y])
 	if _log:
 		print("[eco] t=%.2f slime %d starves at %s carrying %d" % [sim_time, s.uid, s.cell, had])
 	s.starve()
 	counts.starved += 1
+
+
+## Death return: one point per soil cell around `cell` (the soil shows it by itself);
+## whatever finds no soil is lost to the floating pool. One soft ring marks the spot.
+func _return_to_soil(cell: Vector2i, from_px: Vector2, amount: int, source: String) -> void:
+	if amount <= 0:
+		return
+	Rules.death_scatter(cell, amount, grid, source)
+	fx.ring(from_px, Color(0.75, 0.8, 0.6), 6.0, 26.0, 0.5)
 
 
 func _on_slime_gone(s: Node2D) -> void:
@@ -394,16 +450,8 @@ func _on_slime_gone(s: Node2D) -> void:
 	s.queue_free()
 
 
-func _on_plant_drew(p: Node2D, from: Vector2i) -> void:
-	var at: Vector2 = soil.dot_pos(from, grid.nutrient(from))
-	fx.ring(at, Color("f8e68c"), 3.0, 12.0, 0.25)
-	var head: Vector2 = p.head_px()
-	var ref: WeakRef = weakref(p)
-	fx.mote(at, func() -> Vector2: return head, 0.5, func() -> void:
-		var live: Node2D = ref.get_ref()
-		if live != null:
-			live.gulp()
-		fx.ring(head, Color("f8e68c"), 5.0, 16.0, 0.25))
+func _on_plant_drew(p: Node2D, _from: Vector2i) -> void:
+	p.gulp()
 
 
 func _on_bloomed(p: Node2D) -> void:
@@ -415,10 +463,9 @@ func _on_bloomed(p: Node2D) -> void:
 		print("[eco] t=%.2f bloom at %s" % [sim_time, p.cell])
 
 
-## A bud that starved: its collected nutrient leaves for the floating pool.
+## A bud that starved: its collected nutrient goes back into the soil around it.
 func _on_withered(p: Node2D, had: int) -> void:
-	grid.pool_deposit(had, "bud-wither(%d,%d)" % [p.cell.x, p.cell.y])
-	fx.drift(p.head_px(), had)
+	_return_to_soil(p.cell, p.head_px(), had, "bud-wither(%d,%d)" % [p.cell.x, p.cell.y])
 	counts.withered += 1
 	if _log:
 		print("[eco] t=%.2f bud withers at %s holding %d" % [sim_time, p.cell, had])
@@ -433,13 +480,8 @@ func _on_released(p: Node2D, had: int) -> void:
 	if o.left > 0:
 		if Eco.REMAINDER_TO_POOL:
 			grid.pool_deposit(o.left, "flower-remainder(%d,%d)" % [p.cell.x, p.cell.y])
-			fx.drift(head, o.left)
 		else:
-			var got := Rules.scatter(p.cell, o.left, grid, "flower-remainder(%d,%d)" % [p.cell.x, p.cell.y])
-			for c in got:
-				soil.hide_incoming(c)
-				var to_px := Spec.center(c) * Spec.CELL_PX
-				fx.mote(head, func() -> Vector2: return to_px, 0.5, func() -> void: soil.reveal(c))
+			Rules.scatter(p.cell, o.left, grid, "flower-remainder(%d,%d)" % [p.cell.x, p.cell.y])
 	var ways := _open_ways(p.cell)
 	var per_way: Dictionary = {}
 	for i in o.count:
@@ -558,6 +600,8 @@ func _process(delta: float) -> void:
 		_debug.queue_redraw()
 	if _quit_after >= 0.0 and sim_time >= _quit_after:
 		print("[eco] t=%.1f ledger %d / %d  soil %d  pool %d  spent %d  alive %d crawling, %d buds, %d flowers  counts %s" % [sim_time, ledger_total(), initial_total, grid.soil_total(), grid.pool_total, repro_spent, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER), counts])
+		if _stats_on:
+			_print_soil_stats()
 		get_tree().quit()
 	var hover := Spec.cell_of(_world.get_local_mouse_position() / Spec.CELL_PX)
 	map.set_hover(hover)
@@ -679,7 +723,7 @@ func _build_hud() -> void:
 	hud.add_child(_stats)
 	_notice = _caption("", Vector2(0, 662), Vector2(1280, 22), 15, Color(1.0, 0.92, 0.6))
 	hud.add_child(_notice)
-	hud.add_child(_caption("左键挖土（黄点/小花/大花 = 养分一二三级）  右键拖动或 WASD 平移  [Space] 演示  [R] 重置  [N] 换图  [F] 快进  [P] 暂停  [G] 数值  [Z] 尺寸  [Esc] 退出",
+	hud.add_child(_caption("左键挖土（苔越满养分越多，金纹 = 10 以上）  右键拖动或 WASD 平移  [Space] 演示  [R] 重置  [N] 换图  [F] 快进  [P] 暂停  [G] 数值  [Z] 尺寸  [Esc] 退出",
 		Vector2(0, 690), Vector2(1280, 22), 13, grey))
 
 

@@ -109,7 +109,8 @@ static func crawler_fate(hp: int, carried: int, cell_has_plant: bool) -> String:
 
 
 ## Bud / flower: take 1 nutrient from the nearest soil holding some, ring by ring out to
-## `radius` (Chebyshev). Returns the cell drawn from, or (-1, -1) if there was none.
+## `radius` (Chebyshev). Rich soil (Eco.PLANT_SKIPS_SOIL_FROM or more) is left alone, as in
+## the original game, so soil can stay rich enough to hatch higher creatures. Returns the cell drawn from, or (-1, -1) if there was none.
 static func plant_draw(pos: Vector2i, radius: int, grid: RefCounted) -> Vector2i:
 	for r in range(1, radius + 1):
 		for dx in range(-r, r + 1):
@@ -117,7 +118,7 @@ static func plant_draw(pos: Vector2i, radius: int, grid: RefCounted) -> Vector2i
 				if maxi(absi(dx), absi(dy)) != r:
 					continue
 				var c := pos + Vector2i(dx, dy)
-				if grid.has_nutrient(c):
+				if grid.has_nutrient(c) and grid.nutrient(c) < Eco.PLANT_SKIPS_SOIL_FROM:
 					grid.add_nutrient(c, -1)
 					return c
 	return Vector2i(-1, -1)
@@ -127,3 +128,36 @@ static func plant_draw(pos: Vector2i, radius: int, grid: RefCounted) -> Vector2i
 static func offspring(collected: int) -> Dictionary:
 	var count := mini(Eco.SPAWN_MAX, collected / Eco.NUTRIENT_PER_SPAWN)
 	return {"count": count, "spent": count * Eco.NUTRIENT_PER_SPAWN, "left": collected - count * Eco.NUTRIENT_PER_SPAWN}
+
+
+## Nutrient of a creature that starved or withered returns to the soil around it, as in the
+## original game: within DEATH_SCATTER_RING (7x7), each soil cell takes at most 1 point,
+## nearest ring first and, inside a ring, cells below before cells beside before cells
+## above. What finds no soil is lost: it goes to the floating pool with its source.
+## (The original's exact fill order beyond the first ring is not documented; this follows
+## its first-ring order outwards.) Returns the cells that received a point.
+static func death_scatter(origin: Vector2i, amount: int, grid: RefCounted, source: String) -> Array[Vector2i]:
+	var got: Array[Vector2i] = []
+	var left := amount
+	for ring in range(1, Eco.DEATH_SCATTER_RING + 1):
+		if left <= 0:
+			break
+		var cells: Array[Vector2i] = []
+		for dy in range(ring, -ring - 1, -1):
+			var xs: Array[int] = [0]
+			for k in range(1, ring + 1):
+				xs.append(-k)
+				xs.append(k)
+			for dx in xs:
+				if maxi(absi(dx), absi(dy)) == ring:
+					cells.append(origin + Vector2i(dx, dy))
+		for c in cells:
+			if left <= 0:
+				break
+			if grid.is_soil(c):
+				grid.add_nutrient(c, 1)
+				got.append(c)
+				left -= 1
+	if left > 0:
+		grid.pool_deposit(left, source + ":no-soil-left")
+	return got

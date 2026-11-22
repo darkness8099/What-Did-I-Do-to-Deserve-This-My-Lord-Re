@@ -172,6 +172,27 @@ func _rules_life() -> void:
 		["0000000", "0900000", "0000000", "0000000", "0000100", "0000000", "0000000"])
 	_check(Rules.plant_draw(Vector2i(3, 3), 2, g) == Vector2i(4, 4), "a plant draws from the nearest ring first")
 
+	g = _grid(["#######", "#.....#", "#.....#", "#..o..#", "#.....#", "#.....#", "#######"],
+		["0000000", "0000000", "0009000", "0000000", "0000000", "0000000", "0000000"])
+	g.add_nutrient(Vector2i(3, 2), 2)
+	var skipped := Rules.plant_draw(Vector2i(3, 3), 2, g)
+	g.add_nutrient(Vector2i(3, 2), -1)
+	var taken := Rules.plant_draw(Vector2i(3, 3), 2, g)
+	_check(skipped == Vector2i(-1, -1) and taken == Vector2i(3, 2) and g.nutrient(Vector2i(3, 2)) == 9,
+		"a plant leaves soil holding 11 or more alone, and draws again once it is below 11")
+
+	# Death return: one point per soil cell, below first, then beside, then above; the rest is lost.
+	var ring: Array[String] = ["#####", "#...#", "#.o.#", "#...#", "#####"]
+	var zero5: Array[String] = ["00000", "00000", "00000", "00000", "00000"]
+	g = _grid(ring, zero5)
+	var back := Rules.death_scatter(Vector2i(2, 2), 3, g, "test")
+	_check(back == [Vector2i(2, 3), Vector2i(1, 3), Vector2i(3, 3)] and g.soil_total() == 3 and g.pool_total == 0,
+		"starved nutrient returns to soil, one point per cell, the cells below first")
+	g = _grid(ring, zero5)
+	back = Rules.death_scatter(Vector2i(2, 2), 11, g, "test")
+	_check(back.size() == 8 and g.soil_total() == 8 and g.pool_total == 3 and g.pool_entries[0].source == "test:no-soil-left",
+		"each soil cell takes at most 1; what finds no soil is lost to the floating pool with its source")
+
 	var o11 := Rules.offspring(11)
 	var o8 := Rules.offspring(8)
 	var o20 := Rules.offspring(20)
@@ -332,8 +353,8 @@ func _mapgen() -> void:
 		plan_ok = plan_ok and (g.is_open(c) or g.dig_out(c) >= 0)
 	_check(plan_ok, "the demo dig plan (%d cells) can be dug in order from the entrance" % plan.size())
 
-	_check(Soil.tier(0) == 0 and Soil.tier(1) == 1 and Soil.tier(10) == 1 and Soil.tier(11) == 2
-		and Soil.tier(20) == 2 and Soil.tier(21) == 3, "soil look tiers: 0 / 1-10 / 11-20 / 21+")
+	_check(Soil.tier(0) == 0 and Soil.tier(1) == 1 and Soil.tier(9) == 1 and Soil.tier(10) == 2
+		and Soil.tier(16) == 2 and Soil.tier(17) == 3, "soil look bands follow what hatches: 0 / 1-9 / 10-16 / 17+")
 
 
 func _scene_generated(main: Node) -> void:
@@ -421,6 +442,15 @@ func _run(main: Node, seconds: float, step := 1.0 / 60.0) -> void:
 
 
 func _scene(main: Node) -> void:
+	# Soil holding 10 or more no longer hatches a slime (10..16 is kept for the predator).
+	main.load_map("small")
+	main.grid.add_nutrient(Vector2i(5, 3), 6)
+	var ten: int = main.grid.nutrient(Vector2i(5, 3))
+	var nine_ok: bool = Eco.SPAWN_MAX_SOIL_NUTRIENT == 9
+	_check(ten == 9 and nine_ok, "slimes hatch from soil holding 1..9")
+	main.grid.add_nutrient(Vector2i(5, 3), 1)
+	_check(main.do_dig(Vector2i(5, 3), true) and main.slimes.is_empty(), "digging soil that holds 10 opens it without hatching a slime")
+
 	main.load_map("small")
 	var grid: RefCounted = main.grid
 	var total: int = main.initial_total

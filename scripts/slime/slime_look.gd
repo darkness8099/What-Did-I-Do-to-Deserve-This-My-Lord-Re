@@ -30,7 +30,8 @@ const LINE_W := 2.4
 const LIGHT := Vector2(-0.55, -0.83)   ## world direction towards the light
 
 var stage: int = Stage.CRAWL
-var nutrient := 1                 ## carried nutrient 0..3 (crawler): body size and back spots
+var nutrient := 1                 ## carried nutrient 0..3; drawn only if show_carried is on
+var show_carried := false         ## off since ECO-004: carried nutrient changes neither size nor marks
 var vigor := 1.0                  ## 1 healthy .. 0 spent: a secondary cue only (all stages)
 var facing := 0.0                 ## radians, crawler heading
 var palette := "green"
@@ -155,7 +156,7 @@ func _shade() -> Color:
 # ---------------------------------------------------------------- crawler
 
 func _crawl_scale() -> float:
-	return 0.84 + 0.07 * clampi(nutrient, 0, 3)     # size says nutrient and nothing else
+	return 0.84 + 0.07 * (clampi(nutrient, 0, 3) if show_carried else 2)
 
 
 func _draw_crawl() -> void:
@@ -165,7 +166,7 @@ func _draw_crawl() -> void:
 	var breath := sin(_t * 2.0)
 	var light := LIGHT.rotated(-facing)
 	var length := 0.74 * u * k * (1.0 + stretch)
-	var radius := (0.215 + 0.012 * nutrient) * u * k * (1.0 + 0.025 * breath) * (1.0 - 0.55 * stretch)
+	var radius := (0.215 + 0.012 * (nutrient if show_carried else 2)) * u * k * (1.0 + 0.025 * breath) * (1.0 - 0.55 * stretch)
 	var wag := sin(_t * (3.2 if moving else 1.6)) * (0.5 if moving else 0.35) * (1.0 - 0.6 * weak)
 	var mark: Color = _pal.mark
 	var lit: Color = _pal.lit
@@ -208,7 +209,7 @@ func _draw_crawl() -> void:
 		# Round, yellow and ringed in dark, so they can not be taken for the highlight.
 		var xs: Array[float] = [-0.03, -0.2, -0.33]
 		var rs: Array[float] = [0.078, 0.06, 0.044]
-		var count := mini(nutrient, 3)
+		var count := mini(nutrient, 3) if show_carried else 0
 		for i in count:
 			var sway := 0.07 * u * k * pow(1.0 - (xs[i] + 0.47), 2.2) * wag
 			var p := Vector2(xs[i] * length, sway)

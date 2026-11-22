@@ -15,7 +15,11 @@ const ABSORB_AT_OR_BELOW := 1        ## carrying this or less: take 1 from a nei
 const RELEASE_AT_OR_ABOVE := 2       ## carrying this or more: give the surplus away
 const KEEP_ON_RELEASE := 1           ## what it keeps after releasing
 const ECOLOGY_COOLDOWN_MOVES := 2    ## completed moves between two absorb / release checks
-const SPAWN_MAX_SOIL_NUTRIENT := 10  ## soil richer than this does not hatch a base slime
+const SPAWN_MAX_SOIL_NUTRIENT := 9   ## slimes hatch from soil holding 1..9 (as in the original game)
+const PREDATOR_SOIL_MIN := 10        ## soil holding 10..16 is where the first predator will hatch (not built yet)
+const PREDATOR_SOIL_MAX := 16
+const PLANT_SKIPS_SOIL_FROM := 11    ## buds and flowers never draw from soil holding this much or more
+const DEATH_SCATTER_RING := 3        ## starved / withered nutrient returns to soil within this ring (7x7)
 const SCATTER_MAX_RING := 3          ## dig leftovers go to the nearest ring of soil, up to this far
 const HATCH_SECONDS := 0.7           ## pop-out animation before the first step
 

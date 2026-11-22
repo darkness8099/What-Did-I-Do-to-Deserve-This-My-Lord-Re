@@ -132,7 +132,7 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 | `eco_rules.gd` | 移动、吸放、散布、衰弱、结苞、植物取养分、繁殖等纯规则 |
 | `slime.gd` | 爬行阶段的逻辑与连续动画（移动、HP、饿死） |
 | `plant.gd` | 花苞与花的逻辑与原地动画（取养分、开花、枯萎、繁殖） |
-| `eco_soil.gd` / `eco_fx.gd` | 土块养分显示与养分光点反馈 |
+| `eco_soil.gd` / `eco_fx.gd` | 土块养分显示（着色器，见 `scripts/soil/soil_surface.gdshader`）与少量事件特效 |
 | `eco_main.gd` | 场景接线、输入、演示与界面 |
 | `eco_selftest.gd` | 自动检查 |
 
@@ -161,6 +161,9 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 
 # 养分史莱姆（暂定名）三阶段造型预览
  godot --path . res://scenes/slime_preview.tscn
+
+# 土块表面着色器小样（只有土块）
+ godot --path . res://scenes/soil_shader_lab.tscn
 
 # 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖
  godot --path . res://scenes/eco_lab.tscn
