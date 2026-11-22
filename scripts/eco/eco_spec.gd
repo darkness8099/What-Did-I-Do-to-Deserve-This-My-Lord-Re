@@ -57,6 +57,15 @@ const STAGE_TICK := 1.0              ## bud and flower act once per second
 ## Neighbour order for absorbing (old code: up, down, left, right).
 const N4: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
 
+# --- generated map (MAP-001); see eco_mapgen.gd for the nutrient rule
+const GEN_COLS := 40
+const GEN_ROWS := 24
+const GEN_SEED := 20261119         ## default map; N in the scene rolls a new one
+const GEN_ENTRANCE_COL := 20       ## entrance shaft comes down from the top border here
+const GEN_ENTRANCE_DEPTH := 3      ## open cells below the top border
+const GEN_DEMO_DIG_EVERY := 0.8    ## seconds between demo digs on the generated map
+
+# --- small fixed test map (the ECO-001 / ECO-002 map), still used by the self-test.
 ## '#' rock, '.' soil, 'o' open.
 const LAYOUT: Array[String] = [
 	"#################",

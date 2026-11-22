@@ -7,10 +7,15 @@ extends Node2D
 ##   soil + carried by crawlers + collected by buds and flowers + floating pool
 ##   + spent on reproduction = the amount the map started with.
 ##
-## Mouse: left click a soil block next to a tunnel to dig it.
-## Keys:  Space demo digs, R reset, F fast-forward, P pause, G numbers and cells,
-##        Z view size (64 / 48 / 83 px per cell), Esc quit.
-## CLI (after `--`): --demo, --grid, --small, --zoom, --seed=<n>, --selftest, --log,
+## Maps: by default a generated 40 x 24 map (eco_mapgen.gd, task MAP-001); `--map=small`
+## loads the fixed 17 x 9 test map the earlier tasks used.
+##
+## Mouse: left click a soil block next to a tunnel to dig it; right drag pans; wheel zooms.
+## Keys:  WASD / arrows pan, Space demo digs, R reset, N new generated map, F fast-forward,
+##        P pause, G numbers and cells, Z view size (64 / 48 / 83 px per cell / whole map),
+##        Esc quit.
+## CLI (after `--`): --map=small|gen, --map-seed=<n>, --cam=<x>,<y> (cells), --view=<0..3>,
+##        --demo, --grid, --small, --zoom, --seed=<n>, --selftest, --log,
 ##        --quit-after=<s> (run the demo for s seconds of simulation, print the ledger, quit),
 ##        --shots=<dir> (run the demo, save stills, quit; optional --shots-from=<s>,
 ##        --shots-step=<s>, --shots-count=<n>; default one per second for 30 s).
@@ -25,10 +30,13 @@ const FxScript := preload("res://scripts/eco/eco_fx.gd")
 const Slime := preload("res://scripts/eco/slime.gd")
 const Plant := preload("res://scripts/eco/plant.gd")
 const SelfTest := preload("res://scripts/eco/eco_selftest.gd")
+const MapGen := preload("res://scripts/eco/eco_mapgen.gd")
 
-const WORLD_POS := Vector2(96, 46)
-const VIEW_ZOOM: Array[float] = [1.0, 0.75, 1.3]
-const VIEW_NAME: Array[String] = ["默认 64 px/格", "小一档 48 px/格", "放大 83 px/格"]
+const VIEW_ZOOM: Array[float] = [1.0, 0.75, 1.3, 0.0]   ## 0: fit the whole map
+const VIEW_NAME: Array[String] = ["默认 64 px/格", "小一档 48 px/格", "放大 83 px/格", "全图"]
+const PAN_SPEED := 900.0           ## screen pixels per second
+const HUD_TOP := 34.0              ## screen pixels covered by the top bar
+const HUD_BOTTOM := 104.0          ## ... and by the bottom bar
 const FAST := 4.0
 const LANE := 0.12                 ## cells; sideways visual shift when two slimes overlap
 const BROOD_SPREAD_MAX := 0.44     ## cells; how far a newborn may sit from its cell centre
@@ -47,7 +55,10 @@ var paused := false
 var fast := false
 var view := 0
 var demo_on := false
-var seed_value := 20261117
+var seed_value := 20261117         ## randomness of the simulation (movement, release targets)
+var map_kind := "gen"              ## "gen" or "small"
+var map_seed := Eco.GEN_SEED
+var map_info: Dictionary = {}      ## generator output for "gen" maps (clusters, level-2 seeds)
 
 var map: Node2D
 var soil: Node2D
@@ -63,6 +74,9 @@ var _notice: Label
 var _view_label: Label
 var _notice_t := 0.0
 var _demo_i := 0
+var _demo_steps: Array = []        ## [seconds, cell]
+var _drag := false
+var _cam_cells := Vector2(-1, -1)
 var _next_uid := 1
 var _shots_dir := ""
 var _shot_n := 0
@@ -78,6 +92,15 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "--grid":
 			show_grid = true
+		elif a.begins_with("--map="):
+			map_kind = a.trim_prefix("--map=")
+		elif a.begins_with("--map-seed="):
+			map_seed = int(a.trim_prefix("--map-seed="))
+		elif a.begins_with("--view="):
+			view = clampi(int(a.trim_prefix("--view=")), 0, VIEW_ZOOM.size() - 1)
+		elif a.begins_with("--cam="):
+			var xy := a.trim_prefix("--cam=").split(",")
+			_cam_cells = Vector2(float(xy[0]), float(xy[1]))
 		elif a == "--small":
 			view = 1
 		elif a == "--zoom":
@@ -103,15 +126,55 @@ func _ready() -> void:
 			_shots_dir = a.trim_prefix("--shots=")
 			demo_on = true
 
+	_camera = Camera2D.new()
+	add_child(_camera)
+	_build_hud()
+	var demo_from_args := demo_on
+	load_map(map_kind, map_seed)
+	demo_on = demo_from_args
+	if _cam_cells.x >= 0.0:
+		_camera.position = _cam_cells * Spec.CELL_PX
+		_clamp_camera()
+
+	if _selftest:
+		_run_selftest.call_deferred()
+
+
+func _run_selftest() -> void:
+	var failures: int = SelfTest.new().run(self)
+	get_tree().quit(1 if failures > 0 else 0)
+
+
+# ------------------------------------------------------------------ map
+
+## Build (or rebuild) the whole world for a map. "gen": generated with `seed`; "small": the
+## fixed test map. Removes every creature and resets the ledger.
+func load_map(kind: String, seed := Eco.GEN_SEED) -> void:
+	map_kind = kind
+	map_seed = seed
+	if _world != null:
+		_world.free()
+	slimes.clear()
+	plants.clear()
 	grid = Grid.new()
-	grid.load_layout(Eco.LAYOUT)
-	grid.load_nutrient(Eco.NUTRIENT)
+	map_info = {}
+	if kind == "small":
+		grid.load_layout(Eco.LAYOUT)
+		grid.load_nutrient(Eco.NUTRIENT)
+		_demo_steps = Eco.DEMO_DIGS.duplicate()
+	else:
+		map_info = MapGen.generate(Eco.GEN_COLS, Eco.GEN_ROWS, seed)
+		grid.load_layout(map_info.layout)
+		grid.load_nutrient_values(map_info.nutrient)
+		_demo_steps = []
+		var plan := MapGen.demo_plan(Eco.GEN_COLS, Eco.GEN_ROWS, map_info.clusters)
+		for i in plan.size():
+			_demo_steps.append([0.6 + Eco.GEN_DEMO_DIG_EVERY * i, plan[i]])
 	initial_total = grid.soil_total()
-	rng.seed = seed_value
 
 	_world = Node2D.new()
-	_world.position = WORLD_POS
 	add_child(_world)
+	move_child(_world, 0)
 	map = Node2D.new()
 	map.set_script(MapScript)
 	_world.add_child(map)
@@ -135,18 +198,19 @@ func _ready() -> void:
 	_debug.draw.connect(_draw_debug)
 	_world.add_child(_debug)
 
-	_camera = Camera2D.new()
-	add_child(_camera)
-	_build_hud()
+	do_reset()
+	_say("")
+	# Start looking at the entrance on a generated map, at the middle of the small one.
+	if kind == "small":
+		_camera.position = Vector2(grid.cols, grid.rows) * 0.5 * Spec.CELL_PX + Vector2(0, (HUD_BOTTOM - HUD_TOP) * 0.5)
+	else:
+		_camera.position = Vector2(Eco.GEN_ENTRANCE_COL + 0.5, 6.0) * Spec.CELL_PX
 	_apply_view()
 
-	if _selftest:
-		_run_selftest.call_deferred()
 
-
-func _run_selftest() -> void:
-	var failures: int = SelfTest.new().run(self)
-	get_tree().quit(1 if failures > 0 else 0)
+func new_map() -> void:
+	load_map("gen", randi() % 1000000 + 1)
+	_say("新地图：种子 %d" % map_seed)
 
 
 # ------------------------------------------------------------------ actions
@@ -174,13 +238,13 @@ func do_reset() -> void:
 func start_demo() -> void:
 	do_reset()
 	demo_on = true
-	_say("自动演示：依次挖开几块含养分的土")
+	_say("自动演示：从入口挖出一个带回路的通道网，再挖向养分团簇" if map_kind == "gen" else "自动演示：依次挖开几块含养分的土")
 
 
-## Dig a soil block. Returns true if it was dug.
-func do_dig(c: Vector2i) -> bool:
+## Dig a soil block. Returns true if it was dug. `quiet`: no notice (demo digs).
+func do_dig(c: Vector2i, quiet := false) -> bool:
 	if not grid.can_dig(c):
-		if grid.in_bounds(c) and grid.kind(c) == Spec.SOIL:
+		if not quiet and grid.in_bounds(c) and grid.kind(c) == Spec.SOIL:
 			_say("只能挖与通道相邻的土块")
 		return false
 	var had: int = grid.dig_out(c)
@@ -192,8 +256,9 @@ func do_dig(c: Vector2i) -> bool:
 		var take := mini(had, Eco.NUTRIENT_CAPACITY)
 		leftover = had - take
 		_spawn(c, take)
-		_say("养分 %d 的土块：史莱姆出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
-	elif had > 0:
+		if not quiet:
+			_say("养分 %d 的土块：史莱姆出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
+	elif had > 0 and not quiet:
 		_say("养分 %d 的土块过于肥沃，不出生基础史莱姆，养分散到周围" % had)
 	if leftover > 0:
 		var got := Rules.scatter(c, leftover, grid, "dig-leftover(%d,%d)" % [c.x, c.y])
@@ -436,8 +501,8 @@ func count_alive(stage := -1) -> int:
 
 func sim_advance(delta: float) -> void:
 	sim_time += delta
-	while demo_on and _demo_i < Eco.DEMO_DIGS.size() and sim_time >= Eco.DEMO_DIGS[_demo_i][0]:
-		do_dig(Eco.DEMO_DIGS[_demo_i][1])
+	while demo_on and _demo_i < _demo_steps.size() and sim_time >= _demo_steps[_demo_i][0]:
+		do_dig(_demo_steps[_demo_i][1], true)
 		_demo_i += 1
 	for s in slimes.duplicate():
 		s.advance(delta)
@@ -469,6 +534,18 @@ func _process(delta: float) -> void:
 		return
 	if not paused:
 		sim_advance(delta * (FAST if fast else 1.0))
+	var pan := Vector2.ZERO
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		pan.x -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		pan.x += 1.0
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		pan.y -= 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		pan.y += 1.0
+	if pan != Vector2.ZERO:
+		_camera.position += pan.normalized() * PAN_SPEED * delta / _camera.zoom.x
+		_clamp_camera()
 	if _notice_t > 0.0:
 		_notice_t -= delta
 		if _notice_t <= 0.0:
@@ -480,7 +557,7 @@ func _process(delta: float) -> void:
 	if show_grid:
 		_debug.queue_redraw()
 	if _quit_after >= 0.0 and sim_time >= _quit_after:
-		print("[eco] t=%.1f ledger %d / %d  pool %d  spent %d  counts %s" % [sim_time, ledger_total(), initial_total, grid.pool_total, repro_spent, counts])
+		print("[eco] t=%.1f ledger %d / %d  soil %d  pool %d  spent %d  alive %d crawling, %d buds, %d flowers  counts %s" % [sim_time, ledger_total(), initial_total, grid.soil_total(), grid.pool_total, repro_spent, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER), counts])
 		get_tree().quit()
 	var hover := Spec.cell_of(_world.get_local_mouse_position() / Spec.CELL_PX)
 	map.set_hover(hover)
@@ -494,12 +571,23 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		do_dig(Spec.cell_of(_world.get_local_mouse_position() / Spec.CELL_PX))
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			do_dig(Spec.cell_of(_world.get_local_mouse_position() / Spec.CELL_PX))
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_drag = event.pressed
+		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_step_view(-1)
+		elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_step_view(1)
+	elif event is InputEventMouseMotion and _drag:
+		_camera.position -= event.relative / _camera.zoom.x
+		_clamp_camera()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_SPACE: start_demo()
 			KEY_R: do_reset()
+			KEY_N: new_map()
 			KEY_F: fast = not fast
 			KEY_P: paused = not paused
 			KEY_G:
@@ -513,11 +601,44 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ------------------------------------------------------------------ view and hud
 
-func _apply_view() -> void:
+func _view_zoom() -> float:
 	var z := VIEW_ZOOM[view]
+	if z > 0.0:
+		return z
+	var fit_w: float = 1280.0 / (grid.cols * Spec.CELL_PX)
+	var fit_h: float = (720.0 - HUD_TOP - HUD_BOTTOM) / (grid.rows * Spec.CELL_PX)
+	return minf(fit_w, fit_h)
+
+
+func _apply_view() -> void:
+	var z := _view_zoom()
 	_camera.zoom = Vector2(z, z)
-	_camera.position = Vector2(640, 360)
-	_view_label.text = "视图：%s  [Z 切换]" % VIEW_NAME[view]
+	if VIEW_ZOOM[view] == 0.0:
+		_camera.position = Vector2(grid.cols, grid.rows) * 0.5 * Spec.CELL_PX + Vector2(0, (HUD_BOTTOM - HUD_TOP) * 0.5 / z)
+	_clamp_camera()
+	_view_label.text = "视图：%s  [Z / 滚轮]    地图 %d×%d%s" % [VIEW_NAME[view], grid.cols, grid.rows,
+		"  种子 %d [N 换图]" % map_seed if map_kind == "gen" else "（固定测试图）"]
+
+
+## Wheel: step between 48, 64 and 83 px per cell (and the whole-map view below 48).
+func _step_view(dir: int) -> void:
+	var order: Array[int] = [3, 1, 0, 2]
+	var i := clampi(order.find(view) + (-dir), 0, order.size() - 1)
+	view = order[i]
+	_apply_view()
+
+
+## Keep the map on screen: it may scroll until its edge meets the HUD bars, no further.
+func _clamp_camera() -> void:
+	var z := _camera.zoom.x
+	var half := Vector2(640.0, 360.0) / z
+	var lo := Vector2(0, -HUD_TOP / z) + half
+	var hi := Vector2(grid.cols, grid.rows) * Spec.CELL_PX + Vector2(0, HUD_BOTTOM / z) - half
+	for k in 2:
+		if lo[k] > hi[k]:
+			_camera.position[k] = (lo[k] + hi[k]) * 0.5
+		else:
+			_camera.position[k] = clampf(_camera.position[k], lo[k], hi[k])
 
 
 func _say(text: String) -> void:
@@ -544,14 +665,21 @@ func _build_hud() -> void:
 	var hud := CanvasLayer.new()
 	add_child(hud)
 	var grey := Color(0.78, 0.74, 0.7)
+	for r: Rect2 in [Rect2(0, 0, 1280, HUD_TOP), Rect2(0, 720 - HUD_BOTTOM, 1280, HUD_BOTTOM)]:
+		var bar := ColorRect.new()
+		bar.position = r.position
+		bar.size = r.size
+		bar.color = Color(0.06, 0.04, 0.07, 0.86)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hud.add_child(bar)
 	hud.add_child(_caption("养分史莱姆 · 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖", Vector2(0, 4), Vector2(1280, 24), 16))
-	_view_label = _caption("", Vector2(900, 26), Vector2(380, 20), 13, grey)
+	_view_label = _caption("", Vector2(0, 640), Vector2(1280, 20), 13, grey)
 	hud.add_child(_view_label)
-	_stats = _caption("", Vector2(0, 626), Vector2(1280, 22), 14)
+	_stats = _caption("", Vector2(0, 618), Vector2(1280, 22), 14)
 	hud.add_child(_stats)
-	_notice = _caption("", Vector2(0, 650), Vector2(1280, 22), 15, Color(1.0, 0.92, 0.6))
+	_notice = _caption("", Vector2(0, 662), Vector2(1280, 22), 15, Color(1.0, 0.92, 0.6))
 	hud.add_child(_notice)
-	hud.add_child(_caption("左键：挖与通道相邻的土块（黄点 = 养分）    [Space] 自动演示   [R] 重置   [F] 快进   [P] 暂停   [G] 数值与格子   [Z] 尺寸   [Esc] 退出",
+	hud.add_child(_caption("左键挖土（黄点/小花/大花 = 养分一二三级）  右键拖动或 WASD 平移  [Space] 演示  [R] 重置  [N] 换图  [F] 快进  [P] 暂停  [G] 数值  [Z] 尺寸  [Esc] 退出",
 		Vector2(0, 690), Vector2(1280, 22), 13, grey))
 
 

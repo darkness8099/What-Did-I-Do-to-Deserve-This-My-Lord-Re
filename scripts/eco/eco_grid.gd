@@ -23,6 +23,15 @@ func load_nutrient(lines: Array[String]) -> void:
 	_nutrient_initial = _nutrient.duplicate()
 
 
+## Starting nutrient from a row-major array (generated maps). Ignored where not soil.
+func load_nutrient_values(values: PackedInt32Array) -> void:
+	_nutrient.resize(cols * rows)
+	for i in _nutrient.size():
+		var c := Vector2i(i % cols, i / cols)
+		_nutrient[i] = values[i] if kind(c) == Spec.SOIL else 0
+	_nutrient_initial = _nutrient.duplicate()
+
+
 func reset() -> void:
 	_nutrient = _nutrient_initial.duplicate()
 	pool_total = 0

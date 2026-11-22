@@ -11,6 +11,8 @@ const Rules := preload("res://scripts/eco/eco_rules.gd")
 const Grid := preload("res://scripts/eco/eco_grid.gd")
 const Slime := preload("res://scripts/eco/slime.gd")
 const Plant := preload("res://scripts/eco/plant.gd")
+const MapGen := preload("res://scripts/eco/eco_mapgen.gd")
+const Soil := preload("res://scripts/eco/eco_soil.gd")
 
 var _checks := 0
 var _fails := 0
@@ -41,7 +43,9 @@ func run(main: Node) -> int:
 	_rules_life()
 	_slime_node()
 	_plant_node()
+	_mapgen()
 	_scene(main)
+	_scene_generated(main)
 	print("[eco-selftest] %d checks, %d failures" % [_checks, _fails])
 	return _fails
 
@@ -264,6 +268,93 @@ func _plant_node() -> void:
 	p.free()
 
 
+# ------------------------------------------------------------------ generated map
+
+func _mapgen() -> void:
+	var cols := Eco.GEN_COLS
+	var rows := Eco.GEN_ROWS
+	var m := MapGen.generate(cols, rows, 12345)
+	var lines: Array[String] = m.layout
+	var shape_ok := lines.size() == rows and lines[0].length() == cols
+	for y in rows:
+		for x in cols:
+			var ch := lines[y][x]
+			var border := x == 0 or y == 0 or x == cols - 1 or y == rows - 1
+			var shaft := x == Eco.GEN_ENTRANCE_COL and y >= 1 and y <= Eco.GEN_ENTRANCE_DEPTH
+			var want := "#" if border else ("o" if shaft else ".")
+			shape_ok = shape_ok and ch == want
+	_check(shape_ok, "generated map is %d x %d: rock border, entrance shaft from the top, soil everywhere else" % [cols, rows])
+
+	var again := MapGen.generate(cols, rows, 12345)
+	var other := MapGen.generate(cols, rows, 54321)
+	_check(again.nutrient == m.nutrient and other.nutrient != m.nutrient, "the same seed gives the same nutrient, another seed a different one")
+
+	var counts := MapGen.scaled_counts((cols - 2) * (rows - 2))
+	var soil := 0
+	var holding := 0
+	var low := 0
+	var max_v := 0
+	var elevens := 0
+	var values: PackedInt32Array = m.nutrient
+	for y in rows:
+		for x in cols:
+			if lines[y][x] != ".":
+				continue
+			var v := values[y * cols + x]
+			soil += 1
+			holding += 1 if v > 0 else 0
+			low += 1 if v >= 1 and v <= 3 else 0
+			max_v = maxi(max_v, v)
+			elevens += 1 if v == MapGen.LV2_SEED_VALUE else 0
+	_check(m.clusters.size() == counts.clusters and counts.clusters == 3 and counts.lv2 == 2,
+		"cluster and level-2 seed counts scale with area from the old 70 x 40 map (%d clusters, %d seeds)" % [counts.clusters, counts.lv2])
+	_check(max_v <= MapGen.MAX_INITIAL and elevens == m.lv2.size() and m.lv2.size() <= counts.lv2,
+		"no level 3 at the start; level 2 appears only at the seed points (max %d, %d seeds)" % [max_v, m.lv2.size()])
+	var share := float(holding) / soil
+	_check(share > 0.35 and share < 0.8 and low > holding / 3, "background scatter plus clusters: %d%% of soil holds nutrient, mostly low values" % roundi(share * 100.0))
+
+	var seeds_in_clusters := true
+	for p: Vector2i in m.lv2:
+		var inside := false
+		for c: Dictionary in m.clusters:
+			if MapGen._norm_dist(p.x, p.y, c) <= 0.55:
+				inside = true
+		seeds_in_clusters = seeds_in_clusters and inside
+	_check(seeds_in_clusters, "level-2 seed points sit in the dense middle of a cluster")
+
+	# The demo plan can be dug in order from the entrance.
+	var g := Grid.new()
+	g.load_layout(m.layout)
+	g.load_nutrient_values(m.nutrient)
+	var plan := MapGen.demo_plan(cols, rows, m.clusters)
+	var plan_ok := plan.size() > 20
+	for c in plan:
+		plan_ok = plan_ok and (g.is_open(c) or g.dig_out(c) >= 0)
+	_check(plan_ok, "the demo dig plan (%d cells) can be dug in order from the entrance" % plan.size())
+
+	_check(Soil.tier(0) == 0 and Soil.tier(1) == 1 and Soil.tier(10) == 1 and Soil.tier(11) == 2
+		and Soil.tier(20) == 2 and Soil.tier(21) == 3, "soil look tiers: 0 / 1-10 / 11-20 / 21+")
+
+
+func _scene_generated(main: Node) -> void:
+	main.load_map("gen", Eco.GEN_SEED)
+	var grid: RefCounted = main.grid
+	_check(grid.cols == Eco.GEN_COLS and grid.rows == Eco.GEN_ROWS and main.ledger_total() == main.initial_total and main.initial_total > 300,
+		"the scene loads the generated map (%d nutrient in the soil)" % main.initial_total)
+	main.demo_on = true
+	_frame_fail = ""
+	_run(main, 200.0)
+	var n: Dictionary = main.counts
+	_check(_frame_fail == "" and n.born_dug > 5 and n.buds >= 1 and n.blooms >= 1 and n.broods >= 1,
+		"200 s of demo on the generated map: every invariant holds and the cycle runs (dug-born %d, buds %d, blooms %d)" % [n.born_dug, n.buds, n.blooms]
+		+ ("" if _frame_fail == "" else "  -> " + _frame_fail))
+	var before: int = main.initial_total
+	main.load_map("gen", 777)
+	_check(main.initial_total != before and main.slimes.is_empty() and main.plants.is_empty(), "loading another seed builds a different map and clears every creature")
+	main.load_map("gen", Eco.GEN_SEED)
+	_check(main.initial_total == before, "loading the default seed again gives the same map")
+
+
 # ------------------------------------------------------------------ the real scene
 
 func _on_ecology(s: Node2D, res: Dictionary) -> void:
@@ -330,8 +421,8 @@ func _run(main: Node, seconds: float, step := 1.0 / 60.0) -> void:
 
 
 func _scene(main: Node) -> void:
+	main.load_map("small")
 	var grid: RefCounted = main.grid
-	main.do_reset()
 	var total: int = main.initial_total
 	_check(total > 0 and grid.soil_total() == total, "scene starts with all nutrient in the soil (%d)" % total)
 
