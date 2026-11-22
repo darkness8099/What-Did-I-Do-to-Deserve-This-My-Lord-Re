@@ -3,19 +3,19 @@ extends RefCounted
 ## Rules follow the mechanism baseline in PROJECT_STATE.md, taken from the old Unity
 ## project's final code, with the agreed fixes (bud takes over the carried nutrient
 ## once; every exit path settles it exactly once). The whole life cycle is live:
-##   dig nutrient soil -> slime is born -> walks straight, turns when blocked ->
+##   dig nutrient soil -> moss is born -> walks straight, turns when blocked ->
 ##   absorbs / releases nutrient with neighbouring soil, loses HP as it walks ->
 ##   weak with enough nutrient: bud; out of HP without: starves ->
-##   bud draws nutrient from around it -> flower -> new slimes.
+##   bud draws nutrient from around it -> flower -> new mosses.
 ## Not here: predation, heroes, magic.
 
 const STEP_SECONDS := 1.0            ## one cell per second, shown as continuous motion
-const NUTRIENT_CAPACITY := 3         ## most a slime carries
+const NUTRIENT_CAPACITY := 3         ## most a moss carries
 const ABSORB_AT_OR_BELOW := 1        ## carrying this or less: take 1 from a neighbour soil
 const RELEASE_AT_OR_ABOVE := 2       ## carrying this or more: give the surplus away
 const KEEP_ON_RELEASE := 1           ## what it keeps after releasing
 const ECOLOGY_COOLDOWN_MOVES := 2    ## completed moves between two absorb / release checks
-const SPAWN_MAX_SOIL_NUTRIENT := 9   ## slimes hatch from soil holding 1..9 (as in the original game)
+const SPAWN_MAX_SOIL_NUTRIENT := 9   ## mosses hatch from soil holding 1..9 (as in the original game)
 const PREDATOR_SOIL_MIN := 10        ## soil holding 10..16 is where the first predator will hatch (not built yet)
 const PREDATOR_SOIL_MAX := 16
 const PLANT_SKIPS_SOIL_FROM := 11    ## buds and flowers never draw from soil holding this much or more

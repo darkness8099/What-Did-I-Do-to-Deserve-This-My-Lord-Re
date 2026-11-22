@@ -46,7 +46,7 @@ func setup(g: RefCounted) -> void:
 
 
 ## Look band of an amount; it follows what hatches when the block is dug:
-## 0 nothing, 1 (1..9) slime, 2 (10..16) predator, 3 (17+) nothing yet.
+## 0 nothing, 1 (1..9) moss, 2 (10..16) predator, 3 (17+) nothing yet.
 static func tier(n: int) -> int:
 	if n <= 0:
 		return 0

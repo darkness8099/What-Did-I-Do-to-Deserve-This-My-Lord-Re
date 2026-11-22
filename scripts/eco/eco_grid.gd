@@ -47,7 +47,7 @@ func is_soil(c: Vector2i) -> bool:
 	return kind(c) == Spec.SOIL
 
 
-## Soil a slime can trade with: it must already hold nutrient.
+## Soil a moss can trade with: it must already hold nutrient.
 func has_nutrient(c: Vector2i) -> bool:
 	return is_soil(c) and nutrient(c) > 0
 

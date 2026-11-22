@@ -146,7 +146,7 @@ static func _cluster_value(x: int, y: int, clusters: Array[Dictionary], seed: in
 
 ## A dig plan for the built-in demo on a generated map: carry on down the entrance shaft,
 ## open a long top tunnel, three shafts down from it, a bottom tunnel joining them (so the
-## network has loops and slimes spread out), then a branch towards every cluster centre.
+## network has loops and mosses spread out), then a branch towards every cluster centre.
 ## Cells are in dig order; each touches an earlier one, so all can be dug in turn.
 static func demo_plan(cols: int, rows: int, clusters: Array[Dictionary]) -> Array[Vector2i]:
 	var plan: Array[Vector2i] = []

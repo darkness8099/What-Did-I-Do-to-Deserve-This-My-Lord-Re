@@ -1,14 +1,14 @@
 extends Node2D
-## One crawling nutrient slime: rule-driven movement, nutrient carrying and HP, plus the
-## continuous animation that shows it. Logic advances in whole cells (one per
-## Eco.STEP_SECONDS); between cells the body only interpolates.
+## One crawling moss (苔): rule-driven movement, nutrient carrying and HP, plus the
+## continuous animation that shows it, in side view. Logic advances in whole cells (one
+## per Eco.STEP_SECONDS); between cells the body only interpolates.
 ##
 ## Sizes kept apart, as elsewhere in the project:
 ##   footprint - exactly one cell (`cell`), used by every rule;
-##   body      - none: slimes do not collide with each other, only terrain stops them;
-##   visual    - the drawn look, which may shift sideways (`lane`) to stay readable when
-##               two slimes overlap, or fan out (`fan`) right after a flower releases a
-##               brood into one cell. Neither shift changes any rule.
+##   body      - none: mosses do not collide with each other, only terrain stops them;
+##   visual    - the drawn look, which may shift a little sideways (`lane`) to stay
+##               readable when two overlap, or spread out (`fan`) right after a flower
+##               releases a brood into one cell. Neither shift changes any rule.
 ##
 ## What it turns into (bud, starvation) is decided by the scene on `arrived`, because only
 ## the scene knows whether the cell already holds a bud or flower.
@@ -16,20 +16,20 @@ extends Node2D
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Eco := preload("res://scripts/eco/eco_spec.gd")
 const Rules := preload("res://scripts/eco/eco_rules.gd")
-const Look := preload("res://scripts/slime/slime_look.gd")
+const Look := preload("res://scripts/moss/moss_look.gd")
 
 ## Fired after a check that did something. `result` is Rules.resolve_ecology's dictionary.
-signal ecology_done(slime: Node2D, result: Dictionary)
+signal ecology_done(moss: Node2D, result: Dictionary)
 ## Fired at the centre of every cell it reaches, after HP and ecology are settled.
-signal arrived(slime: Node2D)
+signal arrived(moss: Node2D)
 ## Fired when the starving animation has finished and the node can go.
-signal gone(slime: Node2D)
+signal gone(moss: Node2D)
 
 enum Phase { HATCH, WAIT, TURN, MOVE, STUCK, DIE }
 
-const TURN_SECONDS := 0.22        ## quarter turn; part of the one-second step, not extra
+const TURN_SECONDS := 0.22        ## changing heading; part of the one-second step, not extra
 const REVERSE_SECONDS := 0.36     ## about-turn at a dead end
-const DIE_SECONDS := 1.1
+const DIE_SECONDS := 1.3
 const APPEAR_SECONDS := 0.45      ## newborn pop-in
 
 var grid: RefCounted
@@ -53,25 +53,21 @@ var start_delay := 0.0            ## seconds it waited before its first move (ha
 var pos := Vector2.ZERO           ## cells, continuous
 var lane := 0.0                   ## cells, sideways visual shift (set by the scene)
 var fan_dir := Vector2.ZERO       ## brood spread offset in cells; shrinks to nothing once it moves
-var see_through := 0.0            ## 0..1, set by the scene while it crosses a bud or flower
 var fan := 0.0
-var shown_nutrient := 0           ## what the back spots show; lags `carried` while a mote flies
+var see_through := 0.0            ## 0..1, set by the scene while it crosses a bud or flower
 var look: Node2D
 
 var _t := 0.0
 var _dur := 1.0
 var _next_cell := Vector2i.ZERO
 var _next_dir := Vector2i.RIGHT
-var _angle := 0.0
-var _from_angle := 0.0
-var _to_angle := 0.0
+var _shown_dir := Vector2i.RIGHT  ## heading drawn right now (flips half-way through a turn)
 var _move_dur := 1.0
 var _gulp := 0.0
-var _pop := 1.0
 var _clock := 0.0
 var _appear := 1.0                ## 0..1 pop-in progress (newborns)
 var _appear_wait := 0.0
-var _vigor_shown := 1.0
+var _seat := 1.0                  ## 1 on the floor .. 0 mid-cell; eased when the heading changes
 
 
 ## Dug out of the soil: pops out of the hole, then sets off.
@@ -81,10 +77,10 @@ func setup(g: RefCounted, r: RandomNumberGenerator, id: int, at: Vector2i, facin
 	uid = id
 	cell = at
 	dir = facing
+	_shown_dir = facing
+	_seat = 1.0 if facing.y == 0 else 0.0
 	carried = clampi(start_nutrient, 0, Eco.NUTRIENT_CAPACITY)
-	shown_nutrient = carried
 	pos = Spec.center(cell)
-	_angle = Vector2(dir).angle()
 	phase = Phase.HATCH
 	_t = 0.0
 	_dur = Eco.HATCH_SECONDS
@@ -111,14 +107,12 @@ func setup_brood(g: RefCounted, r: RandomNumberGenerator, id: int, at: Vector2i,
 	_sync()
 
 
-## Show a new carried amount on the body. `gained`: pop the new spot in and gulp.
-func set_shown(n: int, gained: bool) -> void:
-	shown_nutrient = clampi(n, 0, Eco.NUTRIENT_CAPACITY)
+## A quick squeeze: it has just taken in or given out nutrient.
+func gulp() -> void:
 	_gulp = 1.0
-	_pop = 0.0 if gained else 1.0
 
 
-## Ran out of HP: stop where it is and dissolve. Logic is over from this moment.
+## Ran out of HP: stop where it is and wither away. Logic is over from this moment.
 func starve() -> void:
 	alive = false
 	carried = 0
@@ -127,11 +121,24 @@ func starve() -> void:
 	_dur = DIE_SECONDS
 
 
+## Heading as the look understands it.
+func heading() -> int:
+	return _heading_of(_shown_dir)
+
+
+static func _heading_of(d: Vector2i) -> int:
+	if d.x > 0:
+		return Look.Heading.RIGHT
+	if d.x < 0:
+		return Look.Heading.LEFT
+	return Look.Heading.UP if d.y < 0 else Look.Heading.DOWN
+
+
 func advance(delta: float) -> void:
 	_clock += delta
 	age += delta
 	_gulp = maxf(_gulp - delta * 2.6, 0.0)
-	_pop = minf(_pop + delta * 3.5, 1.0)
+	_seat = move_toward(_seat, 1.0 if _shown_dir.y == 0 else 0.0, delta * 4.5)
 	if _appear_wait > 0.0:
 		_appear_wait -= delta
 	else:
@@ -153,7 +160,7 @@ func advance(delta: float) -> void:
 	_sync()
 
 
-## Returns false when the slime has stopped for good (turned into something, or gone).
+## Returns false when the moss has stopped for good (turned into something, or gone).
 func _finish_phase() -> bool:
 	match phase:
 		Phase.DIE:
@@ -161,7 +168,7 @@ func _finish_phase() -> bool:
 			gone.emit(self)
 			return false
 		Phase.TURN:
-			_angle = _to_angle
+			_shown_dir = _next_dir
 			phase = Phase.MOVE
 			_t = 0.0
 			_dur = _move_dur
@@ -191,7 +198,7 @@ func _finish_phase() -> bool:
 	return true
 
 
-## Decide the next cell. Turning in place is part of the same one-second step.
+## Decide the next cell. Changing heading is part of the same one-second step.
 func _plan() -> void:
 	var res := Rules.next_step(cell, dir, grid.is_open, rng)
 	_t = 0.0
@@ -206,8 +213,6 @@ func _plan() -> void:
 		_dur = Eco.STEP_SECONDS
 		return
 	phase = Phase.TURN
-	_from_angle = _angle
-	_to_angle = Vector2(_next_dir).angle()
 	_dur = REVERSE_SECONDS if _next_dir == -dir else TURN_SECONDS
 	_move_dur = Eco.STEP_SECONDS - _dur
 
@@ -220,63 +225,47 @@ func vigor() -> float:
 
 func _sync() -> void:
 	var f := clampf(_t / _dur, 0.0, 1.0)
-	var stretch := 0.0
+	var squash := 0.0
 	var grow := 1.0
-	var fade := 1.0
+	var step := float(total_moves)
 	match phase:
 		Phase.HATCH:
-			# Pops out of the fresh hole: overshoot, then settle.
+			# Pops up out of the fresh hole: overshoot, then settle.
 			grow = clampf(1.0 - pow(1.0 - f, 3.0) + 0.22 * sin(PI * f) * (1.0 - f), 0.0, 1.3)
-			stretch = -0.12 * (1.0 - f)
-		Phase.WAIT:
-			# A brood slime getting its bearings: small restless squirms.
-			stretch = 0.04 * sin(_clock * 4.0 + uid)
+			squash = 0.15 * (1.0 - f)
 		Phase.TURN:
-			# Bunches up against the wall while swinging round.
-			_angle = lerp_angle(_from_angle, _to_angle, smoothstep(0.0, 1.0, f))
-			stretch = -0.13 * sin(PI * f)
+			# Bunches up, and half-way through it is facing the new way.
+			squash = 0.2 * sin(PI * f)
+			if f >= 0.5:
+				_shown_dir = _next_dir
 		Phase.MOVE:
-			# Two reach-and-gather pulses per cell; it is longest when it is fastest.
+			# Two reach-and-gather pulses per cell; it covers most ground while stretched.
 			var p := f + 0.03 * sin(TAU * 2.0 * f)
 			pos = Spec.center(cell).lerp(Spec.center(_next_cell), p)
-			stretch = 0.075 * cos(TAU * 2.0 * f)
-		Phase.STUCK:
-			stretch = 0.03 * sin(_clock * 3.0)
-		Phase.DIE:
-			# Starving: a last shudder, then it slumps flat, greys and seeps away.
-			var shudder := 0.06 * sin(f * 40.0) * (1.0 - smoothstep(0.0, 0.35, f))
-			stretch = shudder - 0.3 * smoothstep(0.2, 0.7, f)
-			grow = 1.0 - 0.25 * smoothstep(0.3, 1.0, f)
-			fade = 1.0 - smoothstep(0.55, 1.0, f)
+			step += f
 	# Gulp: a quick squeeze when nutrient goes in or out.
-	stretch -= 0.14 * sin(PI * _gulp) * _gulp
+	squash += 0.14 * sin(PI * _gulp) * _gulp
 	if _appear < 1.0:
 		var a := _appear
 		grow *= clampf(1.0 - pow(1.0 - a, 3.0) + 0.25 * sin(PI * a) * (1.0 - a), 0.0, 1.3)
-	_vigor_shown = 0.0 if phase == Phase.DIE else vigor()
 
-	var perp := Vector2(-sin(_angle), cos(_angle))
-	if perp.x + perp.y < 0.0:
-		perp = -perp                       # same world side for both of two slimes meeting head-on
-	position = (pos + perp * lane + fan_dir * smoothstep(0.0, 1.0, fan)) * Spec.CELL_PX
+	# In side view two overlapping mosses can only step apart along the tunnel.
+	position = (pos + Vector2(lane, 0.0) + fan_dir * smoothstep(0.0, 1.0, fan)) * Spec.CELL_PX
 	scale = Vector2(grow, grow)
-	modulate.a = fade * (1.0 - 0.5 * see_through)
+	modulate.a = 1.0 - 0.5 * see_through
 	visible = _appear > 0.0
-	look.facing = _angle
-	look.nutrient = shown_nutrient
-	look.vigor = _vigor_shown
-	look.stretch = stretch
-	look.spot_pop = 0.35 + 0.65 * _pop + 0.35 * sin(PI * _pop)
+	look.heading = _heading_of(_shown_dir)
+	look.seat = _seat
+	look.step = step
 	look.moving = phase == Phase.MOVE
-	look._t = _clock
+	look.vigor = vigor()
+	look.squash = squash
+	look.anim = "starve" if phase == Phase.DIE else ""
+	look.anim_t = f
+	look._t = _clock + uid * 0.37
 	look.queue_redraw()
 
 
-## Where the visible body is, in cells (lane and fan shifts included).
+## Where the visible body is, in cells (lane and spread shifts included).
 func visual_pos() -> Vector2:
 	return position / Spec.CELL_PX
-
-
-## Heading of the drawn body, radians.
-func angle() -> float:
-	return _angle

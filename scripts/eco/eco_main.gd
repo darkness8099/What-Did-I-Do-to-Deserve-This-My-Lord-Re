@@ -1,5 +1,5 @@
 extends Node2D
-## Ecology test (tasks ECO-001, ECO-002): dig nutrient soil, slimes hatch, wander by rule,
+## Ecology test (tasks ECO-001, ECO-002): dig nutrient soil, mosses hatch, wander by rule,
 ## carry nutrient between soil blocks, weaken, bud, bloom and release a new brood.
 ## See eco_spec.gd for the rules and numbers.
 ##
@@ -28,7 +28,7 @@ const Grid := preload("res://scripts/eco/eco_grid.gd")
 const MapScript := preload("res://scripts/burrow/burrow_map.gd")
 const SoilScript := preload("res://scripts/eco/eco_soil.gd")
 const FxScript := preload("res://scripts/eco/eco_fx.gd")
-const Slime := preload("res://scripts/eco/slime.gd")
+const Moss := preload("res://scripts/eco/moss.gd")
 const Plant := preload("res://scripts/eco/plant.gd")
 const SelfTest := preload("res://scripts/eco/eco_selftest.gd")
 const MapGen := preload("res://scripts/eco/eco_mapgen.gd")
@@ -39,15 +39,15 @@ const PAN_SPEED := 900.0           ## screen pixels per second
 const HUD_TOP := 34.0              ## screen pixels covered by the top bar
 const HUD_BOTTOM := 104.0          ## ... and by the bottom bar
 const FAST := 4.0
-const LANE := 0.12                 ## cells; sideways visual shift when two slimes overlap
+const LANE := 0.12                 ## cells; sideways visual shift when two mosses overlap
 const BROOD_SPREAD_MAX := 0.44     ## cells; how far a newborn may sit from its cell centre
 const C_SOIL_CHIP := Color("7a5a40")
 
 var grid: RefCounted
 var rng := RandomNumberGenerator.new()
-var slimes: Array[Node2D] = []      ## crawlers, including ones still dissolving after starving
+var mosses: Array[Node2D] = []      ## crawlers, including ones still dissolving after starving
 var plants: Array[Node2D] = []      ## buds and flowers, including ones still playing their end
-var repro_spent := 0                ## nutrient turned into new slimes
+var repro_spent := 0                ## nutrient turned into new mosses
 var counts := {"born_dug": 0, "born_brood": 0, "buds": 0, "blooms": 0, "broods": 0, "starved": 0, "withered": 0}
 var sim_time := 0.0
 var initial_total := 0
@@ -159,7 +159,7 @@ func load_map(kind: String, seed := Eco.GEN_SEED) -> void:
 	map_seed = seed
 	if _world != null:
 		_world.free()
-	slimes.clear()
+	mosses.clear()
 	plants.clear()
 	grid = Grid.new()
 	map_info = {}
@@ -297,9 +297,9 @@ func _print_soil_stats() -> void:
 
 func do_reset() -> void:
 	fx.clear()
-	for s in slimes:
+	for s in mosses:
 		s.queue_free()
-	slimes.clear()
+	mosses.clear()
 	for p in plants:
 		p.queue_free()
 	plants.clear()
@@ -337,9 +337,9 @@ func do_dig(c: Vector2i, quiet := false) -> bool:
 		leftover = had - take
 		_spawn(c, take)
 		if not quiet:
-			_say("养分 %d 的土块：史莱姆出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
+			_say("养分 %d 的土块：苔出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
 	elif had > 0 and not quiet:
-		_say("养分 %d 的土块：不出生史莱姆（10–16 留给尚未制作的捕食者），养分散到周围" % had)
+		_say("养分 %d 的土块：不出生苔（10–16 留给尚未制作的捕食者），养分散到周围" % had)
 	if leftover > 0:
 		# Nothing flies: the soil around simply grows a little greener as the amounts land.
 		Rules.scatter(c, leftover, grid, "dig-leftover(%d,%d)" % [c.x, c.y])
@@ -354,28 +354,28 @@ func _open_ways(c: Vector2i) -> Array[Vector2i]:
 	return ways
 
 
-func _new_slime(c: Vector2i) -> Node2D:
+func _new_moss(c: Vector2i) -> Node2D:
 	var s := Node2D.new()
-	s.set_script(Slime)
+	s.set_script(Moss)
 	_units.add_child(s)
 	return s
 
 
-func _wire_slime(s: Node2D) -> void:
+func _wire_moss(s: Node2D) -> void:
 	s.ecology_done.connect(_on_ecology)
 	s.arrived.connect(_on_arrived)
-	s.gone.connect(_on_slime_gone)
-	slimes.append(s)
+	s.gone.connect(_on_moss_gone)
+	mosses.append(s)
 
 
 func _spawn(c: Vector2i, nutrient: int) -> void:
 	# Old code picked any of the four directions; here it faces a way it can actually go.
 	var ways := _open_ways(c)
 	var facing: Vector2i = ways[rng.randi_range(0, ways.size() - 1)] if not ways.is_empty() else Vector2i.RIGHT
-	var s := _new_slime(c)
+	var s := _new_moss(c)
 	s.setup(grid, rng, _next_uid, c, facing, nutrient)
 	_next_uid += 1
-	_wire_slime(s)
+	_wire_moss(s)
 	counts.born_dug += 1
 	fx.ring(Spec.center(c) * Spec.CELL_PX, Color("bdec7c"), 8.0, 30.0, 0.4)
 
@@ -383,10 +383,10 @@ func _spawn(c: Vector2i, nutrient: int) -> void:
 func _on_ecology(s: Node2D, res: Dictionary) -> void:
 	var cells: Array[Vector2i] = res.cells
 	if _log:
-		print("[eco] t=%.2f slime %d at %s %s %s -> carries %d" % [sim_time, s.uid, s.cell, res.action, cells, res.carried])
-	# No nutrient is shown in flight or on the body. The slime gulps; the soil it traded
+		print("[eco] t=%.2f moss %d at %s %s %s -> carries %d" % [sim_time, s.uid, s.cell, res.action, cells, res.carried])
+	# No nutrient is shown in flight or on the body. The moss gulps; the soil it traded
 	# with slowly changes its own look.
-	s.set_shown(res.carried, res.action == "absorb")
+	s.gulp()
 
 
 # ------------------------------------------------------------------ life cycle
@@ -410,7 +410,7 @@ func _make_bud(s: Node2D) -> void:
 	var p := Node2D.new()
 	p.set_script(Plant)
 	_plants.add_child(p)
-	p.setup(grid, s.cell, s.carried, s.angle(), s.shown_nutrient)
+	p.setup(grid, s.cell, s.carried, s.heading())
 	p.drew.connect(_on_plant_drew)
 	p.bloomed.connect(_on_bloomed)
 	p.withered.connect(_on_withered)
@@ -418,10 +418,10 @@ func _make_bud(s: Node2D) -> void:
 	p.gone.connect(_on_plant_gone)
 	plants.append(p)
 	if _log:
-		print("[eco] t=%.2f slime %d buds at %s with %d" % [sim_time, s.uid, s.cell, s.carried])
+		print("[eco] t=%.2f moss %d buds at %s with %d" % [sim_time, s.uid, s.cell, s.carried])
 	s.carried = 0
 	s.alive = false
-	slimes.erase(s)
+	mosses.erase(s)
 	s.queue_free()
 	counts.buds += 1
 
@@ -429,9 +429,9 @@ func _make_bud(s: Node2D) -> void:
 ## Out of HP without enough nutrient: what it carried goes back into the soil around it.
 func _starve(s: Node2D) -> void:
 	var had: int = s.carried
-	_return_to_soil(s.cell, s.position, had, "starvation(slime %d at %d,%d)" % [s.uid, s.cell.x, s.cell.y])
+	_return_to_soil(s.cell, s.position, had, "starvation(moss %d at %d,%d)" % [s.uid, s.cell.x, s.cell.y])
 	if _log:
-		print("[eco] t=%.2f slime %d starves at %s carrying %d" % [sim_time, s.uid, s.cell, had])
+		print("[eco] t=%.2f moss %d starves at %s carrying %d" % [sim_time, s.uid, s.cell, had])
 	s.starve()
 	counts.starved += 1
 
@@ -445,8 +445,8 @@ func _return_to_soil(cell: Vector2i, from_px: Vector2, amount: int, source: Stri
 	fx.ring(from_px, Color(0.75, 0.8, 0.6), 6.0, 26.0, 0.5)
 
 
-func _on_slime_gone(s: Node2D) -> void:
-	slimes.erase(s)
+func _on_moss_gone(s: Node2D) -> void:
+	mosses.erase(s)
 	s.queue_free()
 
 
@@ -488,15 +488,15 @@ func _on_released(p: Node2D, had: int) -> void:
 		var facing: Vector2i = ways[rng.randi_range(0, ways.size() - 1)] if not ways.is_empty() else Vector2i.RIGHT
 		var appear: float = 0.25 + 0.09 * i
 		# Each waits a random 0..SPAWN_DELAY_MAX after it has popped out, so they leave one by one.
-		var wait: float = appear + Slime.APPEAR_SECONDS + rng.randf_range(0.0, Eco.SPAWN_DELAY_MAX)
+		var wait: float = appear + Moss.APPEAR_SECONDS + rng.randf_range(0.0, Eco.SPAWN_DELAY_MAX)
 		# Spill out along the way each one will go, one behind the other.
 		var k: int = per_way.get(facing, 0)
 		per_way[facing] = k + 1
 		var fan := Vector2(facing) * minf(0.24 + 0.1 * k, BROOD_SPREAD_MAX)
-		var s := _new_slime(p.cell)
+		var s := _new_moss(p.cell)
 		s.setup_brood(grid, rng, _next_uid, p.cell, facing, wait, appear, fan)
 		_next_uid += 1
-		_wire_slime(s)
+		_wire_moss(s)
 		counts.born_brood += 1
 	counts.broods += 1
 	fx.chips(head, Color("f0508f"), 8)
@@ -513,7 +513,7 @@ func _on_plant_gone(p: Node2D) -> void:
 
 func carried_total() -> int:
 	var sum := 0
-	for s in slimes:
+	for s in mosses:
 		sum += s.carried
 	return sum
 
@@ -533,7 +533,7 @@ func ledger_total() -> int:
 func count_alive(stage := -1) -> int:
 	var n := 0
 	if stage < 0:
-		for s in slimes:
+		for s in mosses:
 			n += 1 if s.alive else 0
 		return n
 	for p in plants:
@@ -546,15 +546,15 @@ func sim_advance(delta: float) -> void:
 	while demo_on and _demo_i < _demo_steps.size() and sim_time >= _demo_steps[_demo_i][0]:
 		do_dig(_demo_steps[_demo_i][1], true)
 		_demo_i += 1
-	for s in slimes.duplicate():
+	for s in mosses.duplicate():
 		s.advance(delta)
 	for p in plants.duplicate():
 		p.advance(delta)
-	# Slimes pass through each other; when two overlap, each leans to its own side so
+	# Mosss pass through each other; when two overlap, each leans to its own side so
 	# both stay readable. Purely visual.
-	for s in slimes:
+	for s in mosses:
 		var want := 0.0
-		for o in slimes:
+		for o in mosses:
 			if o != s and o.alive and s.alive and s.fan <= 0.0 and s.pos.distance_to(o.pos) < 0.8:
 				want = -LANE if s.uid < o.uid else LANE
 				break
@@ -716,7 +716,7 @@ func _build_hud() -> void:
 		bar.color = Color(0.06, 0.04, 0.07, 0.86)
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hud.add_child(bar)
-	hud.add_child(_caption("养分史莱姆 · 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖", Vector2(0, 4), Vector2(1280, 24), 16))
+	hud.add_child(_caption("苔 · 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖", Vector2(0, 4), Vector2(1280, 24), 16))
 	_view_label = _caption("", Vector2(0, 640), Vector2(1280, 20), 13, grey)
 	hud.add_child(_view_label)
 	_stats = _caption("", Vector2(0, 618), Vector2(1280, 22), 14)
@@ -739,7 +739,7 @@ func _draw_debug() -> void:
 			if grid.is_soil(c) and grid.nutrient(c) > 0:
 				_debug.draw_string_outline(font, Vector2(c) * u + Vector2(4, 16), str(grid.nutrient(c)), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.9))
 				_debug.draw_string(font, Vector2(c) * u + Vector2(4, 16), str(grid.nutrient(c)), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.95, 0.6))
-	for s in slimes:
+	for s in mosses:
 		# Logical footprint (one cell) and what it carries / how many moves since the last check.
 		_debug.draw_rect(Rect2(Vector2(s.cell) * u, Vector2(u, u)), Color(0.45, 0.9, 1.0, 0.9), false, 1.5)
 		var at: Vector2 = s.position + Vector2(-18, -24)

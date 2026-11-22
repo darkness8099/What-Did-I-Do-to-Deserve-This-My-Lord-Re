@@ -1,5 +1,5 @@
 extends Node2D
-## Feedback for the ecology test: nutrient motes flying between soil and slime, short
+## Feedback for the ecology test: nutrient motes flying between soil and moss, short
 ## rings, and soil chips when a block is dug. Advanced by the scene so it follows the
 ## simulation speed. Positions are pixels in the world node's space.
 

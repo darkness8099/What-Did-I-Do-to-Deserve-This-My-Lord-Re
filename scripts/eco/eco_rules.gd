@@ -28,7 +28,7 @@ static func next_step(pos: Vector2i, dir: Vector2i, can_enter: Callable, rng: Ra
 	return {"moved": false, "pos": pos, "dir": dir}
 
 
-## One absorb / release check for a slime standing on `pos` carrying `carried`.
+## One absorb / release check for a moss standing on `pos` carrying `carried`.
 ## Changes the grid. Returns {"action": "absorb" | "release" | "none", "carried": int,
 ## "cells": Array[Vector2i]} where cells is the soil taken from, or one entry per point given.
 static func resolve_ecology(carried: int, pos: Vector2i, grid: RefCounted, rng: RandomNumberGenerator) -> Dictionary:
@@ -98,7 +98,7 @@ static func move_hp(hp: int, moves: int) -> Dictionary:
 
 
 ## What a crawler becomes after a completed move: "bud", "starve" or "live".
-## `cell_has_plant`: only one bud or flower per cell; a weak slime on a taken cell keeps
+## `cell_has_plant`: only one bud or flower per cell; a weak moss on a taken cell keeps
 ## crawling and may bud on a free cell later (or starve if its HP runs out first).
 static func crawler_fate(hp: int, carried: int, cell_has_plant: bool) -> String:
 	if hp <= Eco.BUD_HP_THRESHOLD and carried >= Eco.BUD_REQUIRED_NUTRIENT and not cell_has_plant:
