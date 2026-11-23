@@ -3,13 +3,13 @@ extends Node2D
 ## (towards the top of the screen), whatever the tunnel around it does. It acts once per
 ## Eco.STAGE_TICK; between ticks it only animates in place.
 ##
-## The look (moss_look.gd) plays the transitions: rooting (crawler -> bud), bloom, wither
+## The look (moss_sprite.gd) plays the transitions: rooting (crawler -> bud), bloom, wither
 ## and the flower's end. Only one bud or flower may stand in a cell; crawlers pass through.
 
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Eco := preload("res://scripts/eco/eco_spec.gd")
 const Rules := preload("res://scripts/eco/eco_rules.gd")
-const Look := preload("res://scripts/moss/moss_look.gd")
+const Look := preload("res://scripts/moss/moss_sprite.gd")
 
 ## Drew one point of nutrient out of `from` (a soil cell).
 signal drew(plant: Node2D, from: Vector2i)
@@ -46,7 +46,7 @@ var _tick_clock := 0.0
 var _gulp := 0.0
 
 
-## A crawler at `at`, heading `crawl_heading` (a moss_look Heading), has rooted and holds
+## A crawler at `at`, heading `crawl_heading` (a moss_sprite Heading), has rooted and holds
 ## `seed_collected` (what it carried; the crawler no longer has it).
 func setup(g: RefCounted, at: Vector2i, seed_collected: int, crawl_heading: int) -> void:
 	grid = g

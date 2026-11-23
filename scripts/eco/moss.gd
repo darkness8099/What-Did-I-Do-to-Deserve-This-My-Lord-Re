@@ -16,7 +16,7 @@ extends Node2D
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Eco := preload("res://scripts/eco/eco_spec.gd")
 const Rules := preload("res://scripts/eco/eco_rules.gd")
-const Look := preload("res://scripts/moss/moss_look.gd")
+const Look := preload("res://scripts/moss/moss_sprite.gd")
 
 ## Fired after a check that did something. `result` is Rules.resolve_ecology's dictionary.
 signal ecology_done(moss: Node2D, result: Dictionary)
@@ -54,7 +54,6 @@ var pos := Vector2.ZERO           ## cells, continuous
 var lane := 0.0                   ## cells, sideways visual shift (set by the scene)
 var fan_dir := Vector2.ZERO       ## brood spread offset in cells; shrinks to nothing once it moves
 var fan := 0.0
-var see_through := 0.0            ## 0..1, set by the scene while it crosses a bud or flower
 var look: Node2D
 
 var _t := 0.0
@@ -252,7 +251,6 @@ func _sync() -> void:
 	# In side view two overlapping mosses can only step apart along the tunnel.
 	position = (pos + Vector2(lane, 0.0) + fan_dir * smoothstep(0.0, 1.0, fan)) * Spec.CELL_PX
 	scale = Vector2(grow, grow)
-	modulate.a = 1.0 - 0.5 * see_through
 	visible = _appear > 0.0
 	look.heading = _heading_of(_shown_dir)
 	look.seat = _seat

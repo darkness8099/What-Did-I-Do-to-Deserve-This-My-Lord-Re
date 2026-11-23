@@ -559,14 +559,6 @@ func sim_advance(delta: float) -> void:
 				want = -LANE if s.uid < o.uid else LANE
 				break
 		s.lane = move_toward(s.lane, want, delta * 0.45)
-		# Crossing a bud or flower: the crawler stays on top but turns half see-through,
-		# so the plant behind it can still be read.
-		var over := 0.0
-		for p in plants:
-			if p.alive and s.pos.distance_to(Spec.center(p.cell)) < 0.8:
-				over = 1.0
-				break
-		s.see_through = move_toward(s.see_through, over, delta * 4.0)
 	soil.advance(delta)
 	fx.advance(delta)
 

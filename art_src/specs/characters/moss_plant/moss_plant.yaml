@@ -1,0 +1,216 @@
+spritekiln: 1
+name: moss_plant
+kind: character
+view: topdown
+size: 64
+directions: [s]
+palette: gothic
+camera: {pitch: 0, scale: 0.036, center: [0, 0.80, 0]}
+shadow: null
+
+brief:
+  summary: The rooted moss. A round moss mat with a closed bud on a short stem (bud), or a six-petal flower (flower). No face. The `root` clip starts from the round mat the crawler spreads into.
+  must_keep: [low mat, upright bud with a pink tip, two rings of petals, orange core]
+
+ramps:
+  moss:  ["#0c1d0c", "#183a16", "#245a20", "#37852c", "#59ad3c", "#93d458"]
+  tuft:  ["#143012", "#2c6f26", "#55b53d", "#8fdc57", "#d2f58c"]
+  under: ["#0b170b", "#152e13", "#1f481b", "#2c6626"]
+  stem:  ["#1a3a12", "#3a7a22", "#6fb83a", "#a8e060", "#dcf7a0"]
+  petal: ["#5a1638", "#9a2c5e", "#d4528a", "#f187b2", "#ffc6dd"]
+  petal_back: ["#4a1230", "#7c224c", "#ad3a6e", "#cf5f8f"]
+  core:  ["#6a3008", "#b96a10", "#f0ae26", "#ffe27a"]
+
+materials:
+  moss:  {ramp: moss}
+  tuft:  {ramp: tuft, line: false}
+  under: {ramp: under}
+  stem:  {ramp: stem}
+  petal: {ramp: petal}
+  petal_back: {ramp: petal_back}
+  core:  {ramp: core}
+
+channels:
+  root: [0, 0, 0]
+  sway: 0
+  flower: 0
+  open: 1
+  breathe: 1
+  heap: 0       # < 0: the mat sinks a little (dying)
+  grow: 1       # 0: just the crawler's little sprout; 1: full stem and bud
+  wilt: 0       # petals hang down and thin out; the bud shrivels
+  sag: 0        # the stem buckles and the head nods towards the ground
+
+bones:
+  mat:  {parent: root, scale: "[1, 1 + 1.6*heap, 1]"}
+  stem: {parent: root, pos: [0, 0.24, 0], rot: "[0, 0, 0.10*sway]"}
+  # the stem buckles in the middle: the knee goes one way, the head comes down on the other side
+  mid:  {parent: stem, pos: "[-0.07*sag, 0.55*(0.30 + (0.20 + 0.30*flower)*grow)*(1 - 0.20*sag), 0]"}
+  head: {parent: stem, pos: "[0.20*sag, (0.30 + (0.20 + 0.30*flower)*grow)*(1 - 0.42*sag), 0.06*sag]",
+         rot: "[0.85*sag, 0, 0.12*sway - 0.55*sag]", scale: "breathe*(0.4 + 0.6*grow)"}
+
+parts:
+  skirt:
+    material: under
+    space: mat
+    prims:
+      - ellipsoid: {c: [0, 0.06, 0], r: [0.76, 0.08, 0.70]}
+  mat:
+    material: moss
+    space: mat
+    blend: 0.09
+    prims:
+      - ellipsoid: {c: [0, 0.16, 0], r: [0.70, 0.17, 0.60]}
+      - sphere: {c: [-0.38, 0.22, 0.05], r: 0.20}
+      - sphere: {c: [0.36, 0.22, 0.0], r: 0.21}
+      - sphere: {c: [0.0, 0.25, 0.08], r: 0.22}
+      - sphere: {c: [-0.60, 0.14, 0.0], r: 0.13}
+      - sphere: {c: [0.62, 0.14, 0.05], r: 0.13}
+    paint:
+      - material: tuft
+        spots: {scale: 0.20, density: 0.26, seed: 3}
+      - material: under
+        spots: {scale: 0.22, density: 0.16, seed: 11}
+  tips:
+    material: tuft
+    space: mat
+    min_cover: 2
+    when: "grow > 0.1"
+    prims:
+      - cone: {a: [-0.40, 0.38, 0.05], b: [-0.46, 0.52, 0.05], r: [0.055, 0.012]}
+      - cone: {a: [0.38, 0.40, 0.0], b: [0.46, 0.54, 0.0], r: [0.055, 0.012]}
+      - cone: {a: [-0.62, 0.22, 0.0], b: [-0.74, 0.32, 0.0], r: [0.05, 0.012]}
+      - cone: {a: [0.64, 0.22, 0.05], b: [0.76, 0.32, 0.05], r: [0.05, 0.012]}
+  stalk:
+    material: stem
+    blend: 0.02
+    prims:
+      - cone: {a: "@stem", b: "@mid", r: [0.065, 0.055]}
+      - cone: {a: "@mid", b: "@head", r: "[0.055, 0.05 - 0.012*sag]"}
+  # the two leaves droop and narrow as the plant sags
+  leaves:
+    material: stem
+    blend: 0.01
+    prims:
+      - ellipsoid: {c: {at: stem, off: "[0.04 + 0.16*grow - 0.03*sag, 0.02 + 0.08*grow - 0.10*sag, 0.04]"}, r: "[0.03 + 0.16*grow, 0.05 - 0.015*sag, 0.09 - 0.03*sag]", rot: "[0, 0, 0.45 - 1.0*sag]"}
+      - ellipsoid: {c: {at: stem, off: "[-0.04 - 0.16*grow + 0.03*sag, 0.02 + 0.08*grow - 0.10*sag, 0.04]"}, r: "[0.03 + 0.16*grow, 0.05 - 0.015*sag, 0.09 - 0.03*sag]", rot: "[0, 0, -0.45 + 1.0*sag]"}
+  sprout_bud:
+    material: tuft
+    space: stem
+    min_cover: 2
+    when: "flower < 0.5 and grow <= 0.25"
+    prims:
+      - cone: {a: [0, 0.28, 0], b: [0, 0.58, 0.0], r: [0.11, 0.015]}
+  # a wilting bud gets thin and a little longer, like a pod drying out
+  bud:
+    material: stem
+    space: head
+    when: "flower < 0.5 and grow > 0.25"
+    blend: 0.02
+    prims:
+      - ellipsoid: {c: [-0.05, 0.14, 0], r: "[0.17 - 0.07*wilt, 0.27 + 0.02*wilt, 0.17 - 0.07*wilt]", rot: [0, 0, 0.12]}
+      - ellipsoid: {c: "[0.07 - 0.03*wilt, 0.13, 0.03]", r: "[0.15 - 0.06*wilt, 0.25 + 0.02*wilt, 0.16 - 0.06*wilt]", rot: [0, 0, -0.16]}
+  bud_tip:
+    material: petal
+    space: head
+    when: "flower < 0.5 and grow > 0.45"
+    prims:
+      - cone: {a: [0, 0.30, 0], b: "[0.01 + 0.08*wilt, 0.50 - 0.08*wilt, 0]", r: "[0.10 - 0.04*wilt, 0.02]"}
+  # Petals. `wilt` pulls each one in towards the stem, lets it hang down and makes it thinner:
+  # the upper ones fold over the core, the side ones drop, the lower ones dangle.
+  petals_back:
+    material: petal_back
+    space: head
+    when: "flower > 0.5"
+    prims:
+      - ellipsoid: {c: "[0.34*open*(1 - 0.45*wilt), -0.24*wilt, -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, -1.25*wilt]"}
+      - ellipsoid: {c: "[-0.34*open*(1 - 0.45*wilt), -0.24*wilt, -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, 1.25*wilt]"}
+      - ellipsoid: {c: "[0.17*open*(1 + 0.5*wilt), 0.295*open*(1 - 0.85*wilt), -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, 1.047 - 2.0*wilt]"}
+      - ellipsoid: {c: "[-0.17*open*(1 + 0.5*wilt), 0.295*open*(1 - 0.85*wilt), -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, -1.047 + 2.0*wilt]"}
+      - ellipsoid: {c: "[0.17*open*(1 - 0.35*wilt), -0.295*open - 0.10*wilt, -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, -1.047 - 0.40*wilt]"}
+      - ellipsoid: {c: "[-0.17*open*(1 - 0.35*wilt), -0.295*open - 0.10*wilt, -0.05]", r: "[0.22 - 0.05*wilt, 0.14 - 0.07*wilt, 0.04]", rot: "[0, 0, 1.047 + 0.40*wilt]"}
+  petals:
+    material: petal
+    space: head
+    when: "flower > 0.5"
+    prims:
+      - ellipsoid: {c: "[0, 0.27*open*(1 - 0.75*wilt), 0.03 + 0.05*wilt]", r: "[0.12 - 0.04*wilt, 0.19 - 0.07*wilt, 0.04]"}
+      - ellipsoid: {c: "[0, -0.27*open - 0.08*wilt, 0.03]", r: "[0.12 - 0.05*wilt, 0.19 + 0.02*wilt, 0.04]"}
+      - ellipsoid: {c: "[0.234*open*(1 - 0.10*wilt), 0.135*open - 0.30*wilt, 0.03]", r: "[0.12 - 0.05*wilt, 0.19 - 0.02*wilt, 0.04]", rot: "[0, 0, -1.047 + 0.75*wilt]"}
+      - ellipsoid: {c: "[-0.234*open*(1 - 0.10*wilt), 0.135*open - 0.30*wilt, 0.03]", r: "[0.12 - 0.05*wilt, 0.19 - 0.02*wilt, 0.04]", rot: "[0, 0, 1.047 - 0.75*wilt]"}
+      - ellipsoid: {c: "[0.234*open*(1 - 0.45*wilt), -0.135*open - 0.20*wilt, 0.03]", r: "[0.12 - 0.05*wilt, 0.19 - 0.02*wilt, 0.04]", rot: "[0, 0, 1.047 - 0.80*wilt]"}
+      - ellipsoid: {c: "[-0.234*open*(1 - 0.45*wilt), -0.135*open - 0.20*wilt, 0.03]", r: "[0.12 - 0.05*wilt, 0.19 - 0.02*wilt, 0.04]", rot: "[0, 0, -1.047 + 0.80*wilt]"}
+  core:
+    material: core
+    space: head
+    when: "flower > 0.5"
+    prims:
+      - ellipsoid: {c: [0, 0, 0.09], r: "[0.13 - 0.03*wilt, 0.13 - 0.03*wilt, 0.07]"}
+
+animations:
+  bud:
+    frames: 6
+    ms: 180
+    channels:
+      sway: "sin(p)"
+      breathe: "1 + 0.04*sin(p)"
+
+  flower:
+    frames: 6
+    ms: 180
+    channels:
+      flower: 1
+      sway: "sin(p)"
+      open: "1 + 0.04*sin(p)"
+
+  # mat with the crawler's sprout -> bud. Starts exactly where the crawler's `root_in` clip ends:
+  # the stem rises and the leaf bud swells into the flower bud, with one bounce.
+  root:
+    loop: false
+    keys:
+      - {ms: 120, set: {grow: 0.0}}
+      - {ms: 100, set: {grow: 0.15}}
+      - {ms: 100, set: {grow: 0.35, breathe: 0.9}}
+      - {ms: 100, set: {grow: 0.65}}
+      - {ms: 100, set: {grow: 0.92}}
+      - {ms: 100, set: {grow: 1.12, breathe: 1.08}}
+      - {ms: 100, set: {grow: 0.95}}
+      - {ms: 140, set: {grow: 1.0}}
+
+  # bud -> flower: squat, swell, burst open with an overshoot
+  bloom:
+    loop: false
+    keys:
+      - {ms: 120, set: {breathe: 0.86}}
+      - {ms: 110, set: {breathe: 1.16}}
+      - {ms: 80,  set: {flower: 1, open: 0.25, breathe: 0.62}}
+      - {ms: 90,  set: {flower: 1, open: 0.80, breathe: 0.95}}
+      - {ms: 110, set: {flower: 1, open: 1.14, breathe: 1.07}}
+      - {ms: 140, set: {flower: 1, open: 1.0, breathe: 1.0}}
+
+  # bud starves: it thins like a drying pod, the stem buckles, the leaves hang
+  # (the yellowing and the final fade are done in the engine)
+  wither:
+    loop: false
+    keys:
+      - {ms: 150, set: {wilt: 0.20, sag: 0.05}}
+      - {ms: 150, set: {wilt: 0.45, sag: 0.20, breathe: 0.97}}
+      - {ms: 150, set: {wilt: 0.70, sag: 0.42, breathe: 0.93}}
+      - {ms: 150, set: {wilt: 0.90, sag: 0.66, breathe: 0.88}}
+      - {ms: 150, set: {wilt: 1.0, sag: 0.86, breathe: 0.84, heap: -0.08}}
+      - {ms: 260, set: {wilt: 1.0, sag: 1.0, breathe: 0.80, heap: -0.15}}
+
+  # flower spent: one swell and shake as the young are let go, then it wilts in place:
+  # petals drop, the head nods, the stem buckles
+  release:
+    loop: false
+    keys:
+      - {ms: 100, set: {flower: 1, breathe: 1.12, open: 1.06}}
+      - {ms: 70,  set: {flower: 1, breathe: 1.16, open: 1.08, sway: 1.2}}
+      - {ms: 70,  set: {flower: 1, breathe: 1.16, open: 1.08, sway: -1.2}}
+      - {ms: 130, set: {flower: 1, breathe: 1.0, open: 1.0, wilt: 0.22}}
+      - {ms: 140, set: {flower: 1, open: 0.98, wilt: 0.48, sag: 0.12}}
+      - {ms: 140, set: {flower: 1, open: 0.96, wilt: 0.72, sag: 0.34, breathe: 0.96}}
+      - {ms: 140, set: {flower: 1, open: 0.94, wilt: 0.90, sag: 0.58, breathe: 0.92}}
+      - {ms: 150, set: {flower: 1, open: 0.92, wilt: 1.0, sag: 0.80, breathe: 0.88, heap: -0.08}}
+      - {ms: 260, set: {flower: 1, open: 0.90, wilt: 1.0, sag: 1.0, breathe: 0.84, heap: -0.15}}

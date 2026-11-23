@@ -8,7 +8,7 @@ extends Node2D
 
 const SideScene := preload("res://assets/spritekiln/ant/ant.tscn")
 const TopScene := preload("res://assets/spritekiln/ant_top/ant_top.tscn")
-const DissolveShader := preload("res://scripts/fx/pixel_dissolve.gdshader")
+const FxShader := preload("res://scripts/fx/sprite_fx.gdshader")
 
 enum Heading { RIGHT, DOWN, LEFT, UP }
 
@@ -27,7 +27,7 @@ var dissolve := 0.0:
 	set(v):
 		dissolve = clampf(v, 0.0, 1.0)
 		if _mat:
-			_mat.set_shader_parameter("progress", dissolve)
+			_mat.set_shader_parameter("dissolve", dissolve)
 
 var _side: AnimatedSprite2D
 var _top: AnimatedSprite2D
@@ -37,7 +37,7 @@ var _anim: StringName = &"idle"
 
 func _ready() -> void:
 	_mat = ShaderMaterial.new()
-	_mat.shader = DissolveShader
+	_mat.shader = FxShader
 	_mat.set_shader_parameter("seed", float(get_instance_id() % 97))
 	_side = SideScene.instantiate()
 	_side.position = Vector2(0, FLOOR_Y * CELL_PX)      # its origin is the ground under the feet

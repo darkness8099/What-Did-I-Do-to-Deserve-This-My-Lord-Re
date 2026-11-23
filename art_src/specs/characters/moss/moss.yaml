@@ -1,0 +1,135 @@
+spritekiln: 1
+name: moss
+kind: character
+view: topdown
+size: 64
+directions: [e, s, w, n]
+palette: gothic
+camera: {pitch: 0, scale: 0.036, center: [0, 0.80, 0]}
+shadow: null
+
+brief:
+  summary: A crawling clump of moss. Lumpy mound, a paler front and a darker back, a short sprout leaning forward. No eyes.
+  must_keep: [lumpy mound silhouette, sprout leaning forward, paler front and darker back, no face]
+
+ramps:
+  moss:  ["#0c1d0c", "#183a16", "#245a20", "#37852c", "#59ad3c", "#93d458"]
+  tuft:  ["#143012", "#2c6f26", "#55b53d", "#8fdc57", "#d2f58c"]
+  under: ["#0b170b", "#152e13", "#1f481b", "#2c6626"]
+  front: ["#143012", "#2a6a24", "#48a436", "#74c94a", "#aee66a", "#d8f79a"]
+  back:  ["#0a180a", "#122b12", "#1b431a", "#285f23", "#387d2c"]
+  back_soft: ["#0b1b0b", "#153316", "#204f1d", "#307328", "#489733", "#74bd47"]
+  stem:  ["#1a3a12", "#3a7a22", "#6fb83a", "#a8e060", "#dcf7a0"]
+
+materials:
+  moss:  {ramp: moss}
+  tuft:  {ramp: tuft, line: false}
+  front: {ramp: front}
+  back:  {ramp: back}
+  back_soft: {ramp: back_soft}
+  under: {ramp: under}
+  stem:  {ramp: stem}
+
+channels:
+  root: [0, 0, 0]
+  stretch: 1
+  reach: 0      # the front lump pushes forward
+  gather: 0     # the back lump pulls in
+  hump: 0       # the middle rises while the back catches up
+  sway: 0
+  lean: 0.75
+  nod: 0
+  flat: 0       # 0: the crawling mound; 1: spread into the round mat the plant grows from
+
+bones:
+  body:   {parent: root, scale: "[(1 + 0.52*flat)/sqrt(stretch), (1 - 0.58*flat)/sqrt(stretch), stretch*(1 - 0.14*flat)]"}
+  sprout: {parent: body, pos: "[-0.05*(1 - flat), 0.74 + 0.05*hump + 0.06*flat, (0.40 + 0.10*reach)*(1 - flat)]", inherit_scale: false, rot: "[lean + nod, 0, 0.25*sway]"}
+
+parts:
+  skirt:
+    material: under
+    space: body
+    blend: 0.08
+    prims:
+      - ellipsoid: {c: "[0, 0.07, 0.07*(reach - gather)]", r: "[0.50, 0.09, 0.80 + 0.07*(reach + gather)]"}
+      - ellipsoid: {c: "[0.30, 0.05, 0.50 + 0.18*reach]", r: [0.16, 0.06, 0.30]}
+      - ellipsoid: {c: "[-0.30, 0.05, -0.55 - 0.18*gather]", r: [0.16, 0.06, 0.30]}
+  mound:
+    material: moss
+    space: body
+    blend: 0.10
+    prims:
+      - ellipsoid: {c: "[0, 0.36 + 0.07*hump, 0.0]", r: "[0.46, 0.36 + 0.07*hump, 0.62]"}
+      - ellipsoid: {c: "[0.04, 0.42 - 0.04*reach, 0.44 + 0.18*reach]", r: [0.40, 0.36, 0.34]}
+      - ellipsoid: {c: "[-0.04, 0.32, -0.50 - 0.18*gather]", r: [0.38, 0.28, 0.32]}
+      - sphere: {c: "[0.16, 0.62 + 0.08*hump, 0.06]", r: 0.25}
+      - sphere: {c: "[-0.18, 0.58 + 0.06*hump, -0.24]", r: 0.23}
+      - sphere: {c: "[-0.10, 0.64, 0.34 + 0.12*reach]", r: 0.22}
+      - sphere: {c: "[0.22, 0.44, -0.40 - 0.12*gather]", r: 0.20}
+    paint:
+      - material: tuft
+        spots: {scale: 0.20, density: 0.26, seed: 3}
+      - material: under
+        spots: {scale: 0.22, density: 0.16, seed: 11}
+      - material: front
+        prims:
+          - sphere: {c: "[0, 0.30, 1.10 + 0.18*reach]", r: 0.62}
+      - material: back_soft
+        prims:
+          - sphere: {c: "[0, 0.40, -1.00 - 0.18*gather]", r: 0.74}
+      - material: back
+        prims:
+          - sphere: {c: "[0, 0.36, -1.30 - 0.18*gather]", r: 0.74}
+  tips:
+    material: tuft
+    space: body
+    when: "flat < 0.5"
+    min_cover: 2
+    prims:
+      - cone: {a: "[0.14, 0.80 + 0.08*hump, 0.02]", b: "[0.19 + 0.03*sway, 0.93 + 0.08*hump, -0.06]", r: [0.06, 0.012]}
+      - cone: {a: "[0.20, 0.58, -0.46 - 0.12*gather]", b: "[0.26 + 0.03*sway, 0.74, -0.58 - 0.12*gather]", r: [0.055, 0.012]}
+  sprout:
+    material: stem
+    space: sprout
+    min_cover: 2
+    prims:
+      - cone: {a: [0, -0.08, 0], b: [0, 0.30, 0], r: [0.055, 0.04]}
+      - ellipsoid: {c: [0, 0.12, 0.12], r: [0.04, 0.05, 0.13], rot: [-0.6, 0, 0]}
+  sprout_bud:
+    material: tuft
+    space: sprout
+    min_cover: 2
+    prims:
+      - cone: {a: [0, 0.28, 0], b: [0, 0.58, 0.03], r: [0.11, 0.015]}
+
+animations:
+  idle:
+    frames: 6
+    ms: 170
+    channels:
+      stretch: "1 + 0.02*sin(p)"
+      sway: "sin(p)"
+      nod: "0.06*sin(p - 0.6)"
+
+  # one push per cycle, like an inchworm: reach forward, hump up, pull the back in
+  walk:
+    frames: 8
+    ms: 125
+    channels:
+      reach: "sin(p)"
+      gather: "-sin(p - 1.4)"
+      hump: "pos(sin(p - 2.0))"
+      sway: "sin(p - 0.8)"
+      nod: "0.22*sin(p - 0.5)"
+
+  # crawler -> rooted: stop, stand the sprout up, then spread into the mat (the plant's `root` clip follows)
+  root_in:
+    loop: false
+    keys:
+      - {ms: 110, set: {lean: 0.75}}
+      - {ms: 110, set: {lean: 0.35, hump: 0.5, gather: 0.6}}
+      - {ms: 110, set: {lean: 0.0, hump: 1.0, gather: 0.9, reach: -0.6}}
+      - {ms: 100, set: {lean: 0.0, hump: 0.5, gather: 0.4, reach: -0.3, flat: 0.35}}
+      - {ms: 100, set: {lean: 0.0, flat: 0.80}}
+      - {ms: 100, set: {lean: 0.0, flat: 1.06}}
+      - {ms: 140, set: {lean: 0.0, flat: 1.0}}

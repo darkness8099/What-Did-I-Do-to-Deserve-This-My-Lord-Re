@@ -9,7 +9,7 @@ extends Node2D
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Grid := preload("res://scripts/burrow/burrow_grid.gd")
 const MapScript := preload("res://scripts/burrow/burrow_map.gd")
-const Moss := preload("res://scripts/moss/moss_look.gd")
+const Moss := preload("res://scripts/moss/moss_sprite.gd")
 
 const LAYOUT: Array[String] = [
 	"#################",
@@ -117,7 +117,7 @@ func _ready() -> void:
 	add_child(_camera)
 	var hud := CanvasLayer.new()
 	add_child(hud)
-	hud.add_child(_caption("苔 · 爬行、花苞、花（侧视）造型预览    1 格 = 64 px", Vector2(0, 8), Vector2(1280, 26), 17))
+	hud.add_child(_caption("苔 · 爬行、花苞、花造型预览（预渲染像素）    1 格 = 64 px", Vector2(0, 8), Vector2(1280, 26), 17))
 	_view_label = _caption("", Vector2(0, 34), Vector2(1280, 22), 14)
 	hud.add_child(_view_label)
 	hud.add_child(_caption("每只都在原地循环爬行动作    [Z] 尺寸   [G] 一格范围与视觉边界   [Esc] 退出", Vector2(0, 690), Vector2(1280, 22), 14))

@@ -9,7 +9,7 @@ extends Node2D
 const Spec := preload("res://scripts/burrow/grid_spec.gd")
 const Grid := preload("res://scripts/burrow/burrow_grid.gd")
 const MapScript := preload("res://scripts/burrow/burrow_map.gd")
-const Moss := preload("res://scripts/moss/moss_look.gd")
+const Moss := preload("res://scripts/moss/moss_sprite.gd")
 const Ant := preload("res://scripts/ant/ant_look.gd")
 
 const LAYOUT: Array[String] = [
@@ -26,9 +26,9 @@ const LAYOUT: Array[String] = [
 ]
 
 ## kind: "ant" | "moss". For ants: anim "walk" / "idle", or loop "attack" / "death".
-## count + scale: several smaller ants sharing one cell.
+## One unit is two ants sharing a cell (count, default 2), spread along the way they face.
 const ENTRIES: Array[Dictionary] = [
-	{"kind": "moss", "cell": Vector2i(2, 2), "heading": 0, "text": "苔（代码绘制）"},
+	{"kind": "moss", "cell": Vector2i(2, 2), "heading": 0, "text": "苔"},
 	{"kind": "ant", "cell": Vector2i(4, 2), "heading": 0, "anim": "walk", "text": "蚁 向右"},
 	{"kind": "ant", "cell": Vector2i(8, 2), "heading": 2, "anim": "walk", "text": "蚁 向左"},
 	{"kind": "ant", "cell": Vector2i(10, 2), "heading": 0, "anim": "idle", "text": "待机"},
@@ -44,9 +44,10 @@ const ENTRIES: Array[Dictionary] = [
 	{"kind": "moss", "cell": Vector2i(10, 5), "heading": 0, "text": ""},
 	{"kind": "ant", "cell": Vector2i(10, 5), "heading": 0, "anim": "walk", "text": "同格重叠"},
 	{"kind": "ant", "cell": Vector2i(14, 5), "heading": 2, "anim": "walk", "text": "蚁 向左"},
-	{"kind": "ant", "cell": Vector2i(3, 7), "heading": 0, "anim": "walk", "text": "一格一只（原大）"},
-	{"kind": "ant", "cell": Vector2i(6, 7), "heading": 0, "anim": "walk", "count": 2, "scale": 0.62, "text": "一格两只（缩到 62%）"},
-	{"kind": "ant", "cell": Vector2i(9, 7), "heading": 0, "anim": "walk", "count": 3, "scale": 0.5, "text": "一格三只（缩到 50%）"},
+	{"kind": "ant", "cell": Vector2i(3, 7), "heading": 0, "anim": "walk", "count": 1, "text": "只剩一只"},
+	{"kind": "ant", "cell": Vector2i(6, 7), "heading": 0, "anim": "walk", "text": "一格两只"},
+	{"kind": "ant", "cell": Vector2i(7, 7), "heading": 0, "anim": "walk", "text": ""},
+	{"kind": "ant", "cell": Vector2i(8, 7), "heading": 0, "anim": "walk", "text": "三格连着走"},
 	{"kind": "moss", "cell": Vector2i(12, 7), "heading": 0, "text": "苔（对比）"},
 ]
 
@@ -121,7 +122,7 @@ func _ready() -> void:
 	add_child(_camera)
 	var hud := CanvasLayer.new()
 	add_child(hud)
-	hud.add_child(_caption("切叶蚁（SpriteKiln 预渲染）与苔（代码绘制）同屏预览    1 格 = 64 px", Vector2(0, 8), Vector2(1280, 26), 17))
+	hud.add_child(_caption("切叶蚁与苔同屏预览（均为 SpriteKiln 预渲染）    1 格 = 64 px", Vector2(0, 8), Vector2(1280, 26), 17))
 	_view_label = _caption("", Vector2(0, 34), Vector2(1280, 22), 14)
 	hud.add_child(_view_label)
 	hud.add_child(_caption("全部在原地循环动作    [Z] 尺寸   [G] 一格范围   [Esc] 退出", Vector2(0, 690), Vector2(1280, 22), 14))
@@ -130,20 +131,17 @@ func _ready() -> void:
 
 func _add_ants(e: Dictionary, centre: Vector2) -> void:
 	var u := Spec.CELL_PX
-	var count: int = e.get("count", 1)
-	var s: float = e.get("scale", 1.0)
+	var count: int = e.get("count", 2)
+	var heading: int = e.get("heading", 0)
+	var along := Vector2(0, 1) if heading == Ant.Heading.UP or heading == Ant.Heading.DOWN else Vector2(1, 0)
 	var ants: Array = []
 	for i in count:
-		var holder := Node2D.new()
-		# smaller ants keep their feet on the floor and spread along the cell
-		var spread := 0.0 if count == 1 else lerpf(-0.27, 0.27, float(i) / float(count - 1))
-		holder.position = centre + Vector2(spread * u, Ant.FLOOR_Y * u * (1.0 - s))
-		holder.scale = Vector2(s, s)
-		_world.add_child(holder)
+		var spread := 0.0 if count == 1 else lerpf(-0.245, 0.245, float(i) / float(count - 1))
 		var ant := Node2D.new()
 		ant.set_script(Ant)
-		ant.heading = e.get("heading", 0)
-		holder.add_child(ant)
+		ant.position = centre + along * spread * u
+		ant.heading = heading
+		_world.add_child(ant)
 		ant.play(StringName(e.get("anim", "idle")))
 		if i > 0:
 			ant.advance(0.23 * i)
@@ -192,30 +190,35 @@ func _process(delta: float) -> void:
 ## death:  idle 1.0 s, collapse clip (0.62 s) + 0.25 s lying still, dissolve 0.8 s, gone 0.6 s, again.
 func _drive_loop(l: Dictionary, delta: float) -> void:
 	l.t += delta
-	var ant: Node2D = l.ants[0]
+	var next := ""
+	var dissolve := -1.0
 	if l.kind == "attack":
 		if l.phase == 0 and l.t >= 1.0:
-			ant.play(&"attack", true)
+			next = "attack"
 			l.phase = 1
 		elif l.phase == 1 and l.t >= 1.6:
-			ant.play(&"idle", true)
+			next = "idle"
 			l.phase = 0
 			l.t = 0.0
-		return
-	if l.phase == 0 and l.t >= 1.0:
-		ant.play(&"death", true)
+	elif l.phase == 0 and l.t >= 1.0:
+		next = "death"
 		l.phase = 1
 	elif l.phase == 1 and l.t >= 1.87:
 		l.phase = 2
 	elif l.phase == 2:
-		ant.dissolve = (l.t - 1.87) / 0.8
+		dissolve = (l.t - 1.87) / 0.8
 		if l.t >= 2.67:
 			l.phase = 3
 	elif l.phase == 3 and l.t >= 3.27:
-		ant.dissolve = 0.0
-		ant.play(&"idle", true)
+		dissolve = 0.0
+		next = "idle"
 		l.phase = 0
 		l.t = 0.0
+	for ant in l.ants:
+		if dissolve >= 0.0:
+			ant.dissolve = dissolve
+		if next != "":
+			ant.play(StringName(next), true)
 
 
 func _unhandled_input(event: InputEvent) -> void:

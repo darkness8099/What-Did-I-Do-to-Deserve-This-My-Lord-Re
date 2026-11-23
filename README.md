@@ -76,9 +76,9 @@
 | **Space** / **Esc** | 重播自动演示 / 退出 |
 
 <details>
-<summary>🐜 预渲染像素素材预览（切叶蚁）</summary>
+<summary>🐜 预渲染像素素材预览（切叶蚁与苔）</summary>
 
-在编辑器中打开 `scenes/ant_preview.tscn`，按 **F6** 运行。蚂蚁由 SpriteKiln 预渲染，和代码绘制的苔放在同一段通道里对比。**Z** 切换 64 / 80 / 48 px，**G** 显示一格范围，**Esc** 退出。素材源文件与重新渲染的方法见 `art_src/README.md`。
+在编辑器中打开 `scenes/ant_preview.tscn`，按 **F6** 运行。蚂蚁和苔都由 SpriteKiln 预渲染，放在同一段通道里；苔的各形态与过渡另见 `scenes/moss_preview.tscn`。**Z** 切换 64 / 80 / 48 px，**G** 显示一格范围，**Esc** 退出。素材源文件与重新渲染的方法见 `art_src/README.md`。
 
 </details>
 
@@ -127,7 +127,7 @@ AI 开发与交接请先读 [AGENTS.md](AGENTS.md)，再查看 [当前项目状�
 | `burrow_main.gd` | 场景接线、演示、输入、镜头与界面 |
 | `burrow_selftest.gd` | 行为检查与截图脚本 |
 
-苔的造型在 `scripts/moss/`（`moss_look.gd` 绘制爬行、花苞、花及过渡动作，`moss_preview.gd` 是造型预览）。
+苔的造型在 `scripts/moss/`（`moss_sprite.gd` 按状态播放预渲染的爬行、花苞、花及过渡动作，`moss_preview.gd` 是造型预览）；素材源文件在 `art_src/`。
 
 生态循环试验在 `scripts/eco/`：
 

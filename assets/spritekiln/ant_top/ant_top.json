@@ -1035,7 +1035,7 @@
   "frame_size": 64,
   "pivot": {
    "x": 32.0,
-   "y": 30.89
+   "y": 31.29
   },
   "directions": [
    "n",
@@ -1049,8 +1049,8 @@
   "camera": {
    "projection": "orthographic",
    "pitch_deg": 90.0,
-   "world_units_per_px": 0.036,
-   "px_per_unit": 27.7778,
+   "world_units_per_px": 0.056,
+   "px_per_unit": 17.8571,
    "ground_k": 1.0,
    "height_k": 0.0,
    "center": [

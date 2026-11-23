@@ -5,7 +5,7 @@ view: topdown
 size: 64
 directions: [e, s, w, n]
 palette: gothic
-camera: {pitch: 0, scale: 0.036, center: [0, 0.80, 0]}
+camera: {pitch: 0, scale: 0.056, center: [0, 1.00, 0]}
 shadow: null
 
 brief:
@@ -86,8 +86,8 @@ parts:
     space: body
     min_cover: 2
     prims:
-      - cone: {a: [0.07, 0.13, 0.15], b: [0.13, 0.31, 0.08], r: [0.035, 0.008]}
-      - cone: {a: [0.06, 0.08, -0.07], b: [0.10, 0.23, -0.16], r: [0.03, 0.008]}
+      - cone: {a: [0.07, 0.13, 0.15], b: [0.13, 0.31, 0.08], r: [0.048, 0.014]}
+      - cone: {a: [0.06, 0.08, -0.07], b: [0.10, 0.23, -0.16], r: [0.042, 0.014]}
   head:
     material: ant
     space: head
@@ -113,32 +113,32 @@ parts:
     min_cover: 2
     blend: 0.01
     prims:
-      - cone: {a: [0.11, 0.22, 0.27], b: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", r: [0.03, 0.024]}
-      - cone: {a: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", b: "[0.29 + 0.05*ant_sway, 0.44 + 0.06*ant_sway - 0.50*ant_droop, 0.64]", r: [0.024, 0.036]}
+      - cone: {a: [0.11, 0.22, 0.27], b: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", r: [0.042, 0.034]}
+      - cone: {a: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", b: "[0.29 + 0.05*ant_sway, 0.44 + 0.06*ant_sway - 0.50*ant_droop, 0.64]", r: [0.034, 0.048]}
   leg1_L:
     material: leg
     min_cover: 2
     prims:
-      - cone: {a: "@hip1_L", b: "@knee1_L", r: [0.06, 0.045]}
-      - sphere: {c: "@knee1_L", r: 0.052}
-      - cone: {a: "@knee1_L", b: "@tip1_L", r: [0.04, 0.028]}
-      - sphere: {c: "@tip1_L", r: 0.036}
+      - cone: {a: "@hip1_L", b: "@knee1_L", r: [0.075, 0.058]}
+      - sphere: {c: "@knee1_L", r: 0.066}
+      - cone: {a: "@knee1_L", b: "@tip1_L", r: [0.055, 0.04]}
+      - sphere: {c: "@tip1_L", r: 0.05}
   leg2_L:
     material: leg
     min_cover: 2
     prims:
-      - cone: {a: "@hip2_L", b: "@knee2_L", r: [0.06, 0.045]}
-      - sphere: {c: "@knee2_L", r: 0.052}
-      - cone: {a: "@knee2_L", b: "@tip2_L", r: [0.04, 0.028]}
-      - sphere: {c: "@tip2_L", r: 0.036}
+      - cone: {a: "@hip2_L", b: "@knee2_L", r: [0.075, 0.058]}
+      - sphere: {c: "@knee2_L", r: 0.066}
+      - cone: {a: "@knee2_L", b: "@tip2_L", r: [0.055, 0.04]}
+      - sphere: {c: "@tip2_L", r: 0.05}
   leg3_L:
     material: leg
     min_cover: 2
     prims:
-      - cone: {a: "@hip3_L", b: "@knee3_L", r: [0.06, 0.045]}
-      - sphere: {c: "@knee3_L", r: 0.052}
-      - cone: {a: "@knee3_L", b: "@tip3_L", r: [0.04, 0.028]}
-      - sphere: {c: "@tip3_L", r: 0.036}
+      - cone: {a: "@hip3_L", b: "@knee3_L", r: [0.075, 0.058]}
+      - sphere: {c: "@knee3_L", r: 0.066}
+      - cone: {a: "@knee3_L", b: "@tip3_L", r: [0.055, 0.04]}
+      - sphere: {c: "@tip3_L", r: 0.05}
 
 animations:
   idle:
