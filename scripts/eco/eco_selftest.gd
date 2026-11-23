@@ -11,6 +11,7 @@ const Rules := preload("res://scripts/eco/eco_rules.gd")
 const Grid := preload("res://scripts/eco/eco_grid.gd")
 const Moss := preload("res://scripts/eco/moss.gd")
 const Plant := preload("res://scripts/eco/plant.gd")
+const Ant := preload("res://scripts/eco/ant_unit.gd")
 const MapGen := preload("res://scripts/eco/eco_mapgen.gd")
 const Soil := preload("res://scripts/eco/eco_soil.gd")
 
@@ -43,6 +44,8 @@ func run(main: Node) -> int:
 	_rules_life()
 	_moss_node()
 	_plant_node()
+	_ant_rules()
+	_ant_node()
 	_mapgen()
 	_scene(main)
 	_scene_generated(main)
@@ -291,6 +294,86 @@ func _plant_node() -> void:
 
 # ------------------------------------------------------------------ generated map
 
+func _ant_rules() -> void:
+	_check(Rules.ant_wants_food(Eco.ANT_EAT_BELOW_HP - 1) and not Rules.ant_wants_food(Eco.ANT_EAT_BELOW_HP), "ant unit eats only under %d HP" % Eco.ANT_EAT_BELOW_HP)
+	_check(Rules.ant_members_after(Eco.ANT_MEMBER_HP, 2) == 2 and Rules.ant_members_after(Eco.ANT_MEMBER_HP - 1, 2) == 1
+		and Rules.ant_members_after(Eco.ANT_HP_MAX, 1) == 1 and Rules.ant_members_after(0, 1) == 0,
+		"one ant dies under one share of HP (%d); healing never brings it back" % Eco.ANT_MEMBER_HP)
+	_check(Rules.ant_bite_damage(2) == 2 * Rules.ant_bite_damage(1) and Rules.ant_bite_heal(2) == 2 * Rules.ant_bite_heal(1)
+		and Rules.ant_hp_cap(1) * 2 == Rules.ant_hp_cap(2), "bite damage, healing and the HP cap count the ants alive")
+	var t := Rules.ant_take(Eco.ANT_NUTRIENT_CAPACITY - 2, 5)
+	_check(t.carried == Eco.ANT_NUTRIENT_CAPACITY and t.gained == 2 and t.overflow == 3, "prey nutrient fills the unit up to its capacity; the rest overflows")
+
+
+func _ant_node() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	# Nothing to eat in a corridor: loses 1 HP per move, one ant drops, then the unit starves.
+	var g := _grid(["#######", "#ooooo#", "#######"], ["0000000", "0000000", "0000000"])
+	var a := Node2D.new()
+	a.set_script(Ant)
+	a.setup(g, rng, 1, Vector2i(1, 1), Vector2i.RIGHT, 12)
+	var lost_at := [-1]
+	var starved := [-1, -1]
+	var bad := [""]
+	a.member_died.connect(func(x: Node2D) -> void: lost_at[0] = x.total_moves)
+	a.starved.connect(func(x: Node2D, had: int) -> void: starved[0] = x.total_moves; starved[1] = had)
+	var done := [false]
+	a.gone.connect(func(_x: Node2D) -> void: done[0] = true)
+	for i in 60 * 50:
+		a.advance(1.0 / 60.0)
+		for q: Vector2 in a.ant_points():
+			if not g.is_open(Spec.cell_of(q)):
+				bad[0] = "an ant stood in a wall at move %d" % a.total_moves
+	var first_loss := Eco.ANT_HP_INITIAL - Eco.ANT_MEMBER_HP + 1
+	_check(lost_at[0] == first_loss, "barren corridor: the second ant dies after %d moves (at move %d)" % [first_loss, lost_at[0]])
+	_check(starved[0] == Eco.ANT_HP_INITIAL and starved[1] == 12 and a.carried == 0 and not a.alive,
+		"... and the unit starves after %d moves, handing back the 12 it carried" % Eco.ANT_HP_INITIAL)
+	_check(done[0] and bad[0] == "", "both ants stay inside the corridor through every about-turn, and the node reports when it is done" + ("" if bad[0] == "" else "  -> " + bad[0]))
+	a.free()
+
+	# A moss in the way: the unit stops, the two ants bite in rounds, the moss dies and its
+	# nutrient moves over.
+	g = _grid(["#######", "#ooooo#", "#######"], ["0000000", "0000000", "0000000"])
+	var m := Node2D.new()
+	m.set_script(Moss)
+	m.setup(g, rng, 2, Vector2i(2, 1), Vector2i.RIGHT, 3)
+	a = Node2D.new()
+	a.set_script(Ant)
+	a.find_prey = func(c: Vector2i) -> Dictionary:
+		return {"node": m, "kind": "moss"} if m.alive and not m.held and m.pos.distance_to(Spec.center(c)) < Eco.ANT_REACH else {}
+	a.setup(g, rng, 3, Vector2i(1, 1), Vector2i.RIGHT, 10)
+	var meal := [0, 0, 0.0]
+	var clock := [0.0]
+	var first := [-1.0]
+	a.ate.connect(func(_x: Node2D, _k: String, gained: int, _o: int) -> void: meal[0] += 1; meal[1] = gained; meal[2] = clock[0])
+	for i in 60 * 6:
+		clock[0] += 1.0 / 60.0
+		a.advance(1.0 / 60.0)
+		if first[0] < 0.0 and a.phase == Ant.Phase.EAT:
+			first[0] = clock[0]
+	var rounds := ceili(float(Eco.HP_INITIAL) / Rules.ant_bite_damage(2))
+	_check(meal[0] == 1 and meal[1] == 3 and a.carried == 13 and m.carried == 0 and not m.alive,
+		"a hungry unit eats the moss standing in its cell and takes the 3 it carried")
+	_check(absf((meal[2] - first[0]) - rounds * Eco.ANT_BITE_SECONDS) < 0.05,
+		"two ants need %d rounds of %.1f s for a fresh moss (took %.2f s)" % [rounds, Eco.ANT_BITE_SECONDS, meal[2] - first[0]])
+	_check(a.hp == Eco.ANT_HP_INITIAL + rounds * Rules.ant_bite_heal(2) - a.total_moves * Eco.ANT_HP_COST,
+		"each round heals %d per ant; eating itself costs no HP (hp %d)" % [Eco.ANT_BITE_HEAL, a.hp])
+
+	# Fed above the threshold it walks past food.
+	var m2 := Node2D.new()
+	m2.set_script(Moss)
+	m2.setup(g, rng, 4, Vector2i(4, 1), Vector2i.RIGHT, 0)
+	a.find_prey = func(_c: Vector2i) -> Dictionary: return {"node": m2, "kind": "moss"} if m2.alive and not m2.held else {}
+	a.hp = Eco.ANT_HP_MAX
+	for i in 60 * 5:
+		a.advance(1.0 / 60.0)
+	_check(m2.alive and not m2.held and meal[0] == 1, "a unit at %d HP or more does not eat" % Eco.ANT_EAT_BELOW_HP)
+	a.free()
+	m.free()
+	m2.free()
+
+
 func _mapgen() -> void:
 	var cols := Eco.GEN_COLS
 	var rows := Eco.GEN_ROWS
@@ -369,6 +452,8 @@ func _scene_generated(main: Node) -> void:
 	_check(_frame_fail == "" and n.born_dug > 5 and n.buds >= 1 and n.blooms >= 1 and n.broods >= 1,
 		"200 s of demo on the generated map: every invariant holds and the cycle runs (dug-born %d, buds %d, blooms %d)" % [n.born_dug, n.buds, n.blooms]
 		+ ("" if _frame_fail == "" else "  -> " + _frame_fail))
+	_check(n.born_ant >= 1 and n.eaten_moss >= 1 and n.eaten_bud + n.eaten_flower >= 1,
+		"an ant unit hatched from the rich soil the demo digs and ate mosses (%d) and buds or flowers (%d)" % [n.eaten_moss, n.eaten_bud + n.eaten_flower])
 	var before: int = main.initial_total
 	main.load_map("gen", 777)
 	_check(main.initial_total != before and main.mosses.is_empty() and main.plants.is_empty(), "loading another seed builds a different map and clears every creature")
@@ -417,6 +502,18 @@ func _frame_checks(main: Node) -> void:
 			_frame_fail = "moss %d carries %d" % [s.uid, s.carried]
 		if not s.alive and s.carried != 0:
 			_frame_fail = "dead moss %d still carries %d" % [s.uid, s.carried]
+	for a in main.ants:
+		if not main.grid.is_open(Spec.cell_of(a.pos)):
+			_frame_fail = "ant %d logical position in a solid cell at t=%.2f" % [a.uid, main.sim_time]
+		for q: Vector2 in a.ant_points():
+			if not main.grid.is_open(Spec.cell_of(q)):
+				_frame_fail = "ant %d drawn inside a solid cell at t=%.2f" % [a.uid, main.sim_time]
+		if a.carried < 0 or a.carried > Eco.ANT_NUTRIENT_CAPACITY:
+			_frame_fail = "ant %d carries %d" % [a.uid, a.carried]
+		if a.alive and (a.hp <= 0 or a.hp > Rules.ant_hp_cap(a.members) or a.members < 1):
+			_frame_fail = "ant %d has hp %d with %d alive at t=%.2f" % [a.uid, a.hp, a.members, main.sim_time]
+		if not a.alive and a.carried != 0:
+			_frame_fail = "dead ant %d still carries %d" % [a.uid, a.carried]
 	var taken: Dictionary = {}
 	for p in main.plants:
 		if not p.alive:

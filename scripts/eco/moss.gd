@@ -25,7 +25,7 @@ signal arrived(moss: Node2D)
 ## Fired when the starving animation has finished and the node can go.
 signal gone(moss: Node2D)
 
-enum Phase { HATCH, WAIT, TURN, MOVE, STUCK, DIE }
+enum Phase { HATCH, WAIT, TURN, MOVE, STUCK, DIE, HELD }
 
 const TURN_SECONDS := 0.22        ## changing heading; part of the one-second step, not extra
 const REVERSE_SECONDS := 0.36     ## about-turn at a dead end
@@ -47,6 +47,7 @@ var total_moves := 0
 var alive := true
 var phase: int = Phase.HATCH
 var age := 0.0                    ## seconds since it came into being
+var held := false                 ## caught by a predator: it no longer moves or acts, and will die
 var start_delay := 0.0            ## seconds it waited before its first move (hatch or brood wait)
 
 # --- presentation state
@@ -66,6 +67,8 @@ var _gulp := 0.0
 var _clock := 0.0
 var _appear := 1.0                ## 0..1 pop-in progress (newborns)
 var _appear_wait := 0.0
+var _hold_at := Vector2.ZERO
+var _flash := 0.0
 var _seat := 1.0                  ## 1 on the floor .. 0 mid-cell; eased when the heading changes
 
 
@@ -120,6 +123,35 @@ func starve() -> void:
 	_dur = DIE_SECONDS
 
 
+## Caught by a predator standing at `at` (cells): dragged there and kept still.
+func hold(at: Vector2) -> void:
+	held = true
+	phase = Phase.HELD
+	_hold_at = at
+	_t = 0.0
+	_dur = 1.0
+
+
+## A predator's jaws close on it (visual only).
+func flinch() -> void:
+	_flash = 1.0
+	_gulp = 1.0
+
+
+## Bitten for `damage`. Returns -1 while it lives; once dead, the nutrient it carried (the
+## caller owns it from now on) and it crumbles away like a starved one.
+func bitten(damage: int) -> int:
+	if not alive:
+		return -1
+	hp -= damage
+	if hp > 0:
+		return -1
+	var had := carried
+	hp = 0
+	starve()
+	return had
+
+
 ## Heading as the look understands it.
 func heading() -> int:
 	return _heading_of(_shown_dir)
@@ -137,6 +169,7 @@ func advance(delta: float) -> void:
 	_clock += delta
 	age += delta
 	_gulp = maxf(_gulp - delta * 2.6, 0.0)
+	_flash = maxf(_flash - delta * 5.0, 0.0)
 	_seat = move_toward(_seat, 1.0 if _shown_dir.y == 0 else 0.0, delta * 4.5)
 	if _appear_wait > 0.0:
 		_appear_wait -= delta
@@ -144,6 +177,10 @@ func advance(delta: float) -> void:
 		_appear = minf(_appear + delta / APPEAR_SECONDS, 1.0)
 	if phase != Phase.WAIT and phase != Phase.DIE:
 		fan = maxf(fan - delta * 1.6, 0.0)
+	if phase == Phase.HELD:
+		pos = pos.move_toward(_hold_at, delta * 1.2)
+		_sync()
+		return
 	var left := delta
 	var guard := 0
 	while left > 0.0 and guard < 64:
@@ -255,9 +292,10 @@ func _sync() -> void:
 	look.heading = _heading_of(_shown_dir)
 	look.seat = _seat
 	look.step = step
-	look.moving = phase == Phase.MOVE
+	look.moving = phase == Phase.MOVE or phase == Phase.HELD
 	look.vigor = vigor()
 	look.squash = squash
+	look.flash = 0.7 * _flash
 	look.anim = "starve" if phase == Phase.DIE else ""
 	look.anim_t = f
 	look._t = _clock + uid * 0.37

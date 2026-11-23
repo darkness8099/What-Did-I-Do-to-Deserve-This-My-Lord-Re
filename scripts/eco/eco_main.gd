@@ -1,10 +1,11 @@
 extends Node2D
 ## Ecology test (tasks ECO-001, ECO-002): dig nutrient soil, mosses hatch, wander by rule,
 ## carry nutrient between soil blocks, weaken, bud, bloom and release a new brood.
+## ECO-006: richer soil (10..16) hatches an ant unit that eats mosses, buds and flowers.
 ## See eco_spec.gd for the rules and numbers.
 ##
 ## Nutrient ledger, checked by the self-test every frame:
-##   soil + carried by crawlers + collected by buds and flowers + floating pool
+##   soil + carried by crawlers and ants + collected by buds and flowers + floating pool
 ##   + spent on reproduction = the amount the map started with.
 ##
 ## Maps: by default a generated 40 x 24 map (eco_mapgen.gd, task MAP-001); `--map=small`
@@ -30,6 +31,7 @@ const SoilScript := preload("res://scripts/eco/eco_soil.gd")
 const FxScript := preload("res://scripts/eco/eco_fx.gd")
 const Moss := preload("res://scripts/eco/moss.gd")
 const Plant := preload("res://scripts/eco/plant.gd")
+const Ant := preload("res://scripts/eco/ant_unit.gd")
 const SelfTest := preload("res://scripts/eco/eco_selftest.gd")
 const MapGen := preload("res://scripts/eco/eco_mapgen.gd")
 
@@ -47,8 +49,10 @@ var grid: RefCounted
 var rng := RandomNumberGenerator.new()
 var mosses: Array[Node2D] = []      ## crawlers, including ones still dissolving after starving
 var plants: Array[Node2D] = []      ## buds and flowers, including ones still playing their end
+var ants: Array[Node2D] = []        ## ant units, including ones still dissolving after starving
 var repro_spent := 0                ## nutrient turned into new mosses
-var counts := {"born_dug": 0, "born_brood": 0, "buds": 0, "blooms": 0, "broods": 0, "starved": 0, "withered": 0}
+var counts := {"born_dug": 0, "born_brood": 0, "buds": 0, "blooms": 0, "broods": 0, "starved": 0, "withered": 0,
+	"born_ant": 0, "eaten_moss": 0, "eaten_bud": 0, "eaten_flower": 0, "ant_lost": 0, "ant_starved": 0}
 var sim_time := 0.0
 var initial_total := 0
 var show_grid := false
@@ -161,6 +165,7 @@ func load_map(kind: String, seed := Eco.GEN_SEED) -> void:
 		_world.free()
 	mosses.clear()
 	plants.clear()
+	ants.clear()
 	grid = Grid.new()
 	map_info = {}
 	if kind == "small":
@@ -303,6 +308,9 @@ func do_reset() -> void:
 	for p in plants:
 		p.queue_free()
 	plants.clear()
+	for a in ants:
+		a.queue_free()
+	ants.clear()
 	repro_spent = 0
 	for k: String in counts:
 		counts[k] = 0
@@ -338,8 +346,15 @@ func do_dig(c: Vector2i, quiet := false) -> bool:
 		_spawn(c, take)
 		if not quiet:
 			_say("养分 %d 的土块：苔出生，带走 %d 点%s" % [had, take, "，其余散到周围" if leftover > 0 else ""])
+	elif had >= Eco.PREDATOR_SOIL_MIN and had <= Eco.PREDATOR_SOIL_MAX:
+		# as in the original game, the newborn takes everything the block held
+		var take := mini(had, Eco.ANT_NUTRIENT_CAPACITY)
+		leftover = had - take
+		_spawn_ant(c, take)
+		if not quiet:
+			_say("养分 %d 的土块：蚂蚁出生，带走全部养分" % had)
 	elif had > 0 and not quiet:
-		_say("养分 %d 的土块：不出生苔（10–16 留给尚未制作的捕食者），养分散到周围" % had)
+		_say("养分 %d 的土块：17 以上什么也不出生，养分散到周围" % had)
 	if leftover > 0:
 		# Nothing flies: the soil around simply grows a little greener as the amounts land.
 		Rules.scatter(c, leftover, grid, "dig-leftover(%d,%d)" % [c.x, c.y])
@@ -378,6 +393,79 @@ func _spawn(c: Vector2i, nutrient: int) -> void:
 	_wire_moss(s)
 	counts.born_dug += 1
 	fx.ring(Spec.center(c) * Spec.CELL_PX, Color("bdec7c"), 8.0, 30.0, 0.4)
+
+
+func _spawn_ant(c: Vector2i, nutrient: int) -> void:
+	var ways := _open_ways(c)
+	var facing: Vector2i = ways[rng.randi_range(0, ways.size() - 1)] if not ways.is_empty() else Vector2i.RIGHT
+	var a := Node2D.new()
+	a.set_script(Ant)
+	_units.add_child(a)
+	a.find_prey = find_prey
+	a.setup(grid, rng, _next_uid, c, facing, nutrient)
+	_next_uid += 1
+	a.ate.connect(_on_ant_ate)
+	a.member_died.connect(_on_ant_member_died)
+	a.starved.connect(_on_ant_starved)
+	a.gone.connect(_on_ant_gone)
+	ants.append(a)
+	counts.born_ant += 1
+	fx.ring(Spec.center(c) * Spec.CELL_PX, Color("e0a35c"), 8.0, 30.0, 0.4)
+
+
+## What an ant unit standing on `c` can eat: the bud or flower rooted there first, otherwise
+## a crawling moss close enough to the cell centre. {} when there is nothing.
+func find_prey(c: Vector2i) -> Dictionary:
+	var p := plant_at(c)
+	if p != null:
+		return {"node": p, "kind": "bud" if p.stage == Plant.Stage.BUD else "flower"}
+	var centre := Spec.center(c)
+	var best: Node2D = null
+	for s in mosses:
+		if s.alive and not s.held and s.visible and s.pos.distance_to(centre) < Eco.ANT_REACH:
+			if best == null or s.pos.distance_to(centre) < best.pos.distance_to(centre):
+				best = s
+	return {} if best == null else {"node": best, "kind": "moss"}
+
+
+func _on_ant_ate(a: Node2D, kind: String, gained: int, overflow: int) -> void:
+	counts["eaten_" + kind] += 1
+	if overflow > 0:
+		grid.pool_deposit(overflow, "eaten-overflow(ant %d at %d,%d)" % [a.uid, a.cell.x, a.cell.y])
+	if _log:
+		print("[eco] t=%.2f ant %d ate a %s at %s: +%d nutrient (%d lost), hp %d, carries %d" % [sim_time, a.uid, kind, a.cell, gained, overflow, a.hp, a.carried])
+
+
+func _on_ant_member_died(a: Node2D) -> void:
+	counts.ant_lost += 1
+	if _log:
+		print("[eco] t=%.2f ant %d lost one of its two at %s (hp %d)" % [sim_time, a.uid, a.cell, a.hp])
+
+
+func _on_ant_starved(a: Node2D, had: int) -> void:
+	_return_to_soil(a.cell, a.position, had, "starvation(ant %d at %d,%d)" % [a.uid, a.cell.x, a.cell.y])
+	counts.ant_starved += 1
+	if _log:
+		print("[eco] t=%.2f ant %d starves at %s carrying %d after %d meals" % [sim_time, a.uid, a.cell, had, a.meals])
+
+
+func _on_ant_gone(a: Node2D) -> void:
+	ants.erase(a)
+	a.queue_free()
+
+
+func ants_alive() -> int:
+	var n := 0
+	for a in ants:
+		n += 1 if a.alive else 0
+	return n
+
+
+func ant_heads() -> int:
+	var n := 0
+	for a in ants:
+		n += a.members
+	return n
 
 
 func _on_ecology(s: Node2D, res: Dictionary) -> void:
@@ -515,6 +603,8 @@ func carried_total() -> int:
 	var sum := 0
 	for s in mosses:
 		sum += s.carried
+	for a in ants:
+		sum += a.carried
 	return sum
 
 
@@ -550,12 +640,14 @@ func sim_advance(delta: float) -> void:
 		s.advance(delta)
 	for p in plants.duplicate():
 		p.advance(delta)
+	for a in ants.duplicate():
+		a.advance(delta)
 	# Mosss pass through each other; when two overlap, each leans to its own side so
 	# both stay readable. Purely visual.
 	for s in mosses:
 		var want := 0.0
 		for o in mosses:
-			if o != s and o.alive and s.alive and s.fan <= 0.0 and s.pos.distance_to(o.pos) < 0.8:
+			if o != s and o.alive and s.alive and not s.held and not o.held and s.fan <= 0.0 and s.pos.distance_to(o.pos) < 0.8:
 				want = -LANE if s.uid < o.uid else LANE
 				break
 		s.lane = move_toward(s.lane, want, delta * 0.45)
@@ -584,14 +676,14 @@ func _process(delta: float) -> void:
 		_notice_t -= delta
 		if _notice_t <= 0.0:
 			_notice.text = ""
-	_stats.text = "土壤 %d · 携带 %d · 苞花累计 %d · 漂浮池 %d · 繁殖消耗 %d · 合计 %d / 初始 %d      爬行 %d · 花苞 %d · 花 %d      %s%s" % [
+	_stats.text = "土壤 %d · 携带 %d · 苞花累计 %d · 漂浮池 %d · 繁殖消耗 %d · 合计 %d / 初始 %d      爬行 %d · 花苞 %d · 花 %d · 蚂蚁 %d 队 %d 只      %s%s" % [
 		grid.soil_total(), carried_total(), collected_total(), grid.pool_total, repro_spent,
-		ledger_total(), initial_total, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER),
+		ledger_total(), initial_total, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER), ants_alive(), ant_heads(),
 		"快进 ×4" if fast else "速度 ×1", "    已暂停" if paused else ""]
 	if show_grid:
 		_debug.queue_redraw()
 	if _quit_after >= 0.0 and sim_time >= _quit_after:
-		print("[eco] t=%.1f ledger %d / %d  soil %d  pool %d  spent %d  alive %d crawling, %d buds, %d flowers  counts %s" % [sim_time, ledger_total(), initial_total, grid.soil_total(), grid.pool_total, repro_spent, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER), counts])
+		print("[eco] t=%.1f ledger %d / %d  soil %d  pool %d  spent %d  alive %d crawling, %d buds, %d flowers, %d ant units (%d ants)  counts %s" % [sim_time, ledger_total(), initial_total, grid.soil_total(), grid.pool_total, repro_spent, count_alive(), count_alive(Plant.Stage.BUD), count_alive(Plant.Stage.FLOWER), ants_alive(), ant_heads(), counts])
 		if _stats_on:
 			_print_soil_stats()
 		get_tree().quit()
@@ -708,14 +800,14 @@ func _build_hud() -> void:
 		bar.color = Color(0.06, 0.04, 0.07, 0.86)
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hud.add_child(bar)
-	hud.add_child(_caption("苔 · 生态循环试验：出生、搬运、衰弱、结苞、开花、繁殖", Vector2(0, 4), Vector2(1280, 24), 16))
+	hud.add_child(_caption("苔与蚂蚁 · 生态循环试验：苔出生、搬运、结苞、开花、繁殖；蚂蚁吃苔、花苞和花", Vector2(0, 4), Vector2(1280, 24), 16))
 	_view_label = _caption("", Vector2(0, 640), Vector2(1280, 20), 13, grey)
 	hud.add_child(_view_label)
 	_stats = _caption("", Vector2(0, 618), Vector2(1280, 22), 14)
 	hud.add_child(_stats)
 	_notice = _caption("", Vector2(0, 662), Vector2(1280, 22), 15, Color(1.0, 0.92, 0.6))
 	hud.add_child(_notice)
-	hud.add_child(_caption("左键挖土（苔越满养分越多，金纹 = 10 以上）  右键拖动或 WASD 平移  [Space] 演示  [R] 重置  [N] 换图  [F] 快进  [P] 暂停  [G] 数值  [Z] 尺寸  [Esc] 退出",
+	hud.add_child(_caption("左键挖土（苔越满养分越多，金纹 = 10 以上，挖开出蚂蚁）  右键拖动或 WASD 平移  [Space] 演示  [R] 重置  [N] 换图  [F] 快进  [P] 暂停  [G] 数值  [Z] 尺寸  [Esc] 退出",
 		Vector2(0, 690), Vector2(1280, 22), 13, grey))
 
 
@@ -738,6 +830,14 @@ func _draw_debug() -> void:
 		var text := "HP%d 养%d 步%d" % [s.hp, s.carried, s.moves_since_ecology]
 		_debug.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.9))
 		_debug.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.7, 0.95, 1.0))
+	for a in ants:
+		if not a.alive:
+			continue
+		_debug.draw_rect(Rect2(Vector2(a.cell) * u + Vector2(2, 2), Vector2(u - 4, u - 4)), Color(1.0, 0.7, 0.3, 0.9), false, 1.5)
+		var at: Vector2 = a.position + Vector2(-26, -30)
+		var text := "蚁%d只 HP%d 养%d" % [a.members, a.hp, a.carried]
+		_debug.draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, Color(0, 0, 0, 0.9))
+		_debug.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.85, 0.55))
 	for p in plants:
 		if not p.alive:
 			continue

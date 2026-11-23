@@ -36,7 +36,8 @@ const ENTRIES: Array[Dictionary] = [
 	{"kind": "ant", "cell": Vector2i(6, 3), "heading": 3, "anim": "walk", "text": "向上（俯视）", "side": true},
 	{"kind": "ant", "cell": Vector2i(6, 4), "heading": 3, "loop": "death", "text": "俯视 死亡消散", "side": true},
 	{"kind": "ant", "cell": Vector2i(12, 3), "heading": 1, "anim": "walk", "text": "向下（俯视）", "side": true},
-	{"kind": "ant", "cell": Vector2i(12, 4), "heading": 1, "loop": "attack", "text": "俯视 攻击", "side": true},
+	{"kind": "ant", "cell": Vector2i(12, 4), "heading": 1, "loop": "close", "text": "相邻格：靠拢一起咬", "side": true},
+	{"kind": "target", "cell": Vector2i(12, 5), "text": ""},
 	{"kind": "moss", "cell": Vector2i(2, 5), "stage": 1, "text": "花苞"},
 	{"kind": "ant", "cell": Vector2i(3, 5), "heading": 2, "anim": "idle", "text": ""},
 	{"kind": "moss", "cell": Vector2i(4, 5), "stage": 2, "text": "花"},
@@ -48,7 +49,9 @@ const ENTRIES: Array[Dictionary] = [
 	{"kind": "ant", "cell": Vector2i(6, 7), "heading": 0, "anim": "walk", "text": "一格两只"},
 	{"kind": "ant", "cell": Vector2i(7, 7), "heading": 0, "anim": "walk", "text": ""},
 	{"kind": "ant", "cell": Vector2i(8, 7), "heading": 0, "anim": "walk", "text": "三格连着走"},
-	{"kind": "moss", "cell": Vector2i(12, 7), "heading": 0, "text": "苔（对比）"},
+	{"kind": "ant", "cell": Vector2i(10, 7), "heading": 0, "loop": "close", "text": "相邻格：靠拢一起咬"},
+	{"kind": "target", "cell": Vector2i(11, 7), "text": "目标（占位）"},
+	{"kind": "moss", "cell": Vector2i(13, 7), "heading": 0, "text": "苔（对比）"},
 ]
 
 const VIEW_ZOOM: Array[float] = [1.0, 1.25, 0.75]
@@ -104,6 +107,14 @@ func _ready() -> void:
 			look.stage = e.get("stage", 0)
 			_world.add_child(look)
 			_mosses.append(look)
+		elif e.kind == "target":
+			# stand-in for something that blocks its cell (a hero, later): the unit attacks it from next door
+			var block := ColorRect.new()
+			block.color = Color(0.55, 0.6, 0.72)
+			block.size = Vector2(26, 42)
+			block.position = centre + Vector2(-13, 0.43 * u - 42)
+			block.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_world.add_child(block)
 		else:
 			_add_ants(e, centre)
 		var text: String = e.get("text", "")
@@ -147,7 +158,7 @@ func _add_ants(e: Dictionary, centre: Vector2) -> void:
 			ant.advance(0.23 * i)
 		ants.append(ant)
 	if e.has("loop"):
-		_loops.append({"ants": ants, "kind": e.loop, "t": 0.0, "phase": 0})
+		_loops.append({"ants": ants, "kind": e.loop, "t": 0.0, "phase": 0, "centre": centre, "heading": heading})
 
 
 func _caption(text: String, pos: Vector2, size: Vector2, font_size: int) -> Label:
@@ -190,6 +201,9 @@ func _process(delta: float) -> void:
 ## death:  idle 1.0 s, collapse clip (0.62 s) + 0.25 s lying still, dissolve 0.8 s, gone 0.6 s, again.
 func _drive_loop(l: Dictionary, delta: float) -> void:
 	l.t += delta
+	if l.kind == "close":
+		_drive_close(l)
+		return
 	var next := ""
 	var dissolve := -1.0
 	if l.kind == "attack":
@@ -219,6 +233,52 @@ func _drive_loop(l: Dictionary, delta: float) -> void:
 			ant.dissolve = dissolve
 		if next != "":
 			ant.play(StringName(next), true)
+
+
+## Attacking something in the NEXT cell: the ant behind closes up beside the one in front, so
+## both reach, and they bite in turn, each darting forward as its jaws close. Both keep their
+## feet on the same floor line: nothing is shifted up or down. 1 s apart, 0.35 s closing up, three rounds of 0.8 s,
+## 0.35 s falling back.
+const CLOSE_FRONT := 0.33        ## cells ahead of the cell centre, while closed up
+const CLOSE_REAR := 0.10
+const CLOSE_LUNGE := 0.16        ## cells each ant darts forward as it bites; the lunge may reach into the next cell
+const CLOSE_ABREAST := 0.11      ## top view: each ant steps this far (cells) to its own side
+
+func _drive_close(l: Dictionary) -> void:
+	var u := Spec.CELL_PX
+	var t: float = l.t
+	var k := smoothstep(1.0, 1.35, t) - smoothstep(3.75, 4.1, t)
+	var heading: int = l.heading
+	var vertical := heading == Ant.Heading.UP or heading == Ant.Heading.DOWN
+	var fwd := Vector2(0, 1) if heading == Ant.Heading.DOWN else (Vector2(0, -1) if heading == Ant.Heading.UP else (Vector2(-1, 0) if heading == Ant.Heading.LEFT else Vector2(1, 0)))
+	var want := "idle"
+	if (t >= 1.0 and t < 1.35) or t >= 3.75:
+		want = "walk"
+	for i in l.ants.size():
+		var ant: Node2D = l.ants[i]
+		var front: bool = i == l.ants.size() - 1          # the last one added stands furthest along
+		if fwd.x < 0.0 or fwd.y < 0.0:
+			front = i == 0
+		var off := lerpf(0.245, CLOSE_FRONT, k) if front else lerpf(-0.245, CLOSE_REAR, k)
+		var side := Vector2.ZERO
+		if vertical:
+			side = Vector2(CLOSE_ABREAST * (1.0 if front else -1.0) * k * u, 0)
+		ant.z_index = 1 if front else 0
+		if t >= 1.35 and t < 3.75:
+			var round_t := fmod(t - 1.35, 0.8) - (0.0 if front else 0.27)
+			var key := "bit%d" % i
+			if round_t >= 0.0 and round_t < 0.1 and not l.get(key, false):
+				l[key] = true
+				ant.play(&"attack", true)
+			elif round_t >= 0.6 or round_t < 0.0:
+				l[key] = false
+			if round_t >= 0.0 and round_t < 0.48:
+				off += CLOSE_LUNGE * sin(PI * round_t / 0.48)
+		else:
+			ant.play(StringName(want))
+		ant.position = l.centre + fwd * off * u + side
+	if t >= 4.6:
+		l.t = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:

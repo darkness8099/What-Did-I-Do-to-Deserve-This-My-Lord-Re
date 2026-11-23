@@ -16,7 +16,7 @@ const RELEASE_AT_OR_ABOVE := 2       ## carrying this or more: give the surplus 
 const KEEP_ON_RELEASE := 1           ## what it keeps after releasing
 const ECOLOGY_COOLDOWN_MOVES := 2    ## completed moves between two absorb / release checks
 const SPAWN_MAX_SOIL_NUTRIENT := 9   ## mosses hatch from soil holding 1..9 (as in the original game)
-const PREDATOR_SOIL_MIN := 10        ## soil holding 10..16 is where the first predator will hatch (not built yet)
+const PREDATOR_SOIL_MIN := 10        ## soil holding 10..16 hatches an ant unit, which takes all of it
 const PREDATOR_SOIL_MAX := 16
 const PLANT_SKIPS_SOIL_FROM := 11    ## buds and flowers never draw from soil holding this much or more
 const DEATH_SCATTER_RING := 3        ## starved / withered nutrient returns to soil within this ring (7x7)
@@ -55,6 +55,21 @@ const SPAWN_DELAY_MAX := 2.0         ## each newborn waits random(0, this) secon
 ## Where the leftover of a flower's collected nutrient goes (e.g. 11 collected, 5 born, 1 left).
 ## Decided by the user on 2026-11-19: into the floating pool, like starving and withering.
 const REMAINDER_TO_POOL := true
+
+# --- ant unit (二级魔物「群」, stage one: no nest). Task ECO-006. Except where noted these are
+# first values chosen by the AI, to be tuned from demo runs; the original game gives only
+# "eats below a threshold" (larva: born 23 HP, max 64, eats under 44).
+const ANT_MEMBERS := 2               ## ants in one unit (decided by the user)
+const ANT_HP_INITIAL := 40           ## total of the unit
+const ANT_HP_MAX := 64               ## with both ants alive; half of it with one
+const ANT_MEMBER_HP := 20            ## one share: under this with two ants alive, one dies for good
+const ANT_EAT_BELOW_HP := 44         ## eats only when its HP is under this (original larva value)
+const ANT_HP_COST := 1               ## lost on every completed move; standing or eating costs nothing
+const ANT_BITE_SECONDS := 0.8        ## one round of bites
+const ANT_BITE_DAMAGE := 6           ## per living ant, per round
+const ANT_BITE_HEAL := 3             ## per living ant, per round
+const ANT_NUTRIENT_CAPACITY := 30    ## what does not fit goes to the floating pool
+const ANT_REACH := 0.6               ## cells: a crawling moss this close to the unit's cell centre can be caught
 
 const STAGE_TICK := 1.0              ## bud and flower act once per second
 

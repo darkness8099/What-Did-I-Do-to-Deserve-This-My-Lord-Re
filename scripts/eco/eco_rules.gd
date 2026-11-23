@@ -124,6 +124,41 @@ static func plant_draw(pos: Vector2i, radius: int, grid: RefCounted) -> Vector2i
 	return Vector2i(-1, -1)
 
 
+# --- ant unit (stage one)
+
+static func ant_wants_food(hp: int) -> bool:
+	return hp < Eco.ANT_EAT_BELOW_HP
+
+
+## Ants left alive in a unit of `members` whose total HP is `hp`. It only ever goes down:
+## healing does not bring a dead ant back.
+static func ant_members_after(hp: int, members: int) -> int:
+	if hp <= 0:
+		return 0
+	if members > 1 and hp < Eco.ANT_MEMBER_HP * (members - 1):
+		return ant_members_after(hp, members - 1)
+	return members
+
+
+static func ant_hp_cap(members: int) -> int:
+	return Eco.ANT_HP_MAX * members / Eco.ANT_MEMBERS
+
+
+static func ant_bite_damage(members: int) -> int:
+	return Eco.ANT_BITE_DAMAGE * members
+
+
+static func ant_bite_heal(members: int) -> int:
+	return Eco.ANT_BITE_HEAL * members
+
+
+## Nutrient of a dead prey moves onto the unit up to its capacity.
+## Returns {"carried": int, "gained": int, "overflow": int}.
+static func ant_take(carried: int, amount: int) -> Dictionary:
+	var gained := clampi(amount, 0, Eco.ANT_NUTRIENT_CAPACITY - carried)
+	return {"carried": carried + gained, "gained": gained, "overflow": amount - gained}
+
+
 ## Newborns from a flower that collected `collected`, and what is left over.
 static func offspring(collected: int) -> Dictionary:
 	var count := mini(Eco.SPAWN_MAX, collected / Eco.NUTRIENT_PER_SPAWN)

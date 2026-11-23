@@ -29,6 +29,10 @@ var dissolve := 0.0:
 		if _mat:
 			_mat.set_shader_parameter("dissolve", dissolve)
 
+## Set before it enters the tree: the owner calls advance() itself (simulation time), the
+## sprites do not run on their own.
+var manual := false
+
 var _side: AnimatedSprite2D
 var _top: AnimatedSprite2D
 var _mat: ShaderMaterial
@@ -48,6 +52,9 @@ func _ready() -> void:
 	add_child(_top)
 	_side.anim_finished.connect(func(a): if _is_side(): anim_finished.emit(a))
 	_top.anim_finished.connect(func(a): if not _is_side(): anim_finished.emit(a))
+	if manual:
+		_side.process_mode = Node.PROCESS_MODE_DISABLED
+		_top.process_mode = Node.PROCESS_MODE_DISABLED
 	_apply_heading()
 	play(_anim)
 
@@ -61,6 +68,8 @@ func play(anim: StringName, restart: bool = false) -> void:
 
 ## Shift this ant's animation clock, so that several ants do not step in unison.
 func advance(seconds: float) -> void:
+	if not _side:
+		return
 	_side.advance(seconds)
 	_top.advance(seconds)
 

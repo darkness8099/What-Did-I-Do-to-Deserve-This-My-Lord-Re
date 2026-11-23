@@ -44,6 +44,7 @@ var _t := 0.0
 var _clock := 0.0
 var _tick_clock := 0.0
 var _gulp := 0.0
+var _flash := 0.0
 
 
 ## A crawler at `at`, heading `crawl_heading` (a moss_sprite Heading), has rooted and holds
@@ -74,10 +75,33 @@ func gulp() -> void:
 	_gulp = 1.0
 
 
+## A predator's jaws close on it (visual only).
+func flinch() -> void:
+	_flash = 1.0
+	_gulp = 1.0
+
+
+## Bitten for `damage`. Returns -1 while it lives; once dead, the nutrient it had collected
+## (the caller owns it from now on). An eaten flower releases no brood.
+func bitten(damage: int) -> int:
+	if not alive:
+		return -1
+	hp -= damage
+	if hp > 0:
+		return -1
+	alive = false
+	phase = Phase.WITHER if stage == Stage.BUD else Phase.BURST
+	_t = 0.0
+	var had := collected
+	collected = 0
+	return had
+
+
 func advance(delta: float) -> void:
 	_clock += delta
 	_t += delta
 	_gulp = maxf(_gulp - delta * 3.0, 0.0)
+	_flash = maxf(_flash - delta * 5.0, 0.0)
 	if alive:
 		_tick_clock += delta
 		while alive and _tick_clock >= Eco.STAGE_TICK:
@@ -171,5 +195,6 @@ func _sync() -> void:
 	# A starving bud yellows as its HP drops; a healthy plant keeps its colour.
 	look.vigor = clampf(float(hp - 1) / 6.0, 0.0, 1.0) if stage == Stage.BUD and phase == Phase.IDLE else 1.0
 	look.squash = 0.08 * sin(PI * _gulp) * _gulp
+	look.flash = 0.7 * _flash
 	look._t = _clock
 	look.queue_redraw()

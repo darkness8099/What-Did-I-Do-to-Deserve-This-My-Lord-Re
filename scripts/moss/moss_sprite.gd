@@ -47,6 +47,7 @@ var anim_t := 0.0                 ## 0..1 progress of `anim`
 ## shaft). Negative: decide from `heading`.
 var seat := -1.0
 var squash := 0.0                 ## >0 presses it flat and wide for a moment (gulp, turn, landing)
+var flash := 0.0                  ## 0..1 pale blink (being bitten)
 var breathe := true               ## advance its own clock (previews); owners may set _t
 
 var _t := 0.0
@@ -152,3 +153,4 @@ func _show() -> void:
 	_plant.scale = s
 	_mat.set_shader_parameter("wither", wither)
 	_mat.set_shader_parameter("dissolve", dissolve)
+	_mat.set_shader_parameter("flash", flash)
