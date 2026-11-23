@@ -1,0 +1,16 @@
+# SpriteKiln settings for this project's sprite sources (https://github.com/LucasJRamos/spritekiln).
+# This folder holds only the sources; Godot ignores it (.gdignore). Exports go to res://assets/spritekiln/.
+
+[project]
+specs = "specs"
+engine = "godot"
+ai = ["generic"]
+
+[export]
+dir = "assets/spritekiln"
+
+[defaults]
+view = "topdown"
+size = 64
+palette = "gothic"
+camera = { pitch = 0, scale = 0.036 }

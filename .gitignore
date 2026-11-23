@@ -5,3 +5,11 @@
 # Exports and local settings
 export_presets.cfg
 *.tmp
+
+# SpriteKiln render output and caches (regenerated from art_src/specs)
+art_src/**/out/
+art_src/.spritekiln/
+art_src/**/.kilncache/
+
+# Local Python environment for the sprite tool
+art_src/.venv/

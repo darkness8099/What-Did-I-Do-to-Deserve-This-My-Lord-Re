@@ -1,0 +1,191 @@
+spritekiln: 1
+name: ant
+kind: character
+view: topdown
+size: 64
+directions: [e, s, w, n]
+palette: gothic
+camera: {pitch: 0, scale: 0.036, center: [0, 0.80, 0]}
+shadow: null
+
+brief:
+  summary: Chubby leaf-cutter ant. Big round head, round gaster, short legs.
+  must_keep: [big head, round gaster, elbowed antennae, six legs]
+
+ramps:
+  ant:   ["#2a0f0a", "#5a1f12", "#8c3418", "#b9521f", "#dc7a30", "#f2a85a"]
+  jaw:   ["#160a08", "#3a1a12", "#5c2a18", "#7a3a20"]
+  leg:   ["#1c0b08", "#4a1b10", "#7a2e17", "#a8481f", "#c9662a"]
+  eye:   ["#050505", "#101014", "#22222a", "#f4f4f4"]
+
+materials:
+  ant:   {ramp: ant, finish: soft}
+  band:  {ramp: ant, bands: [1, 3]}
+  jaw:   {ramp: jaw}
+  leg:   {ramp: leg}
+  eye:   {ramp: eye, finish: glossy, line: false}
+
+channels:
+  root: [0, 0, 0]
+  bob: 0
+  pitch: 0
+  roll: 0
+  head_pitch: 0
+  head_yaw: 0
+  gaster_pitch: 0
+  ant_sway: 0
+  jaw_open: 0
+  ant_droop: 0
+  foot1_L: [0.29, 0, 0.44]
+  foot2_L: [0.46, 0, 0.08]
+  foot3_L: [0.34, 0, -0.28]
+
+bones:
+  body:   {parent: root, pos: "[0, 0.40 + bob, 0]", rot: "[pitch, 0, roll]"}
+  head:   {parent: body, pos: [0, 0.12, 0.34], rot: "[head_pitch, head_yaw, 0]"}
+  gaster: {parent: body, pos: [0, 0.0, -0.14], rot: "[gaster_pitch, 0, 0]"}
+  hip1_L: {parent: body, pos: [0.11, -0.08, 0.20]}
+  hip2_L: {parent: body, pos: [0.13, -0.09, 0.06]}
+  hip3_L: {parent: body, pos: [0.11, -0.08, -0.08]}
+
+ik:
+  leg1_L: {start: hip1_L, space: root, target: "foot1_L + [0, 0.03, 0]", lengths: [0.26, 0.32],
+           pole: [1, 1.4, 0.4], pole_space: root, joint: knee1_L, end: tip1_L}
+  leg2_L: {start: hip2_L, space: root, target: "foot2_L + [0, 0.03, 0]", lengths: [0.26, 0.32],
+           pole: [1, 1.4, 0], pole_space: root, joint: knee2_L, end: tip2_L}
+  leg3_L: {start: hip3_L, space: root, target: "foot3_L + [0, 0.03, 0]", lengths: [0.26, 0.34],
+           pole: [1, 1.4, -0.4], pole_space: root, joint: knee3_L, end: tip3_L}
+
+parts:
+  gaster:
+    material: ant
+    space: gaster
+    blend: 0.06
+    prims:
+      - ellipsoid: {c: [0, 0.07, -0.38], r: [0.32, 0.31, 0.35]}
+      - cone: {a: [0, 0.02, -0.64], b: [0, -0.03, -0.78], r: [0.11, 0.03]}
+    paint:
+      - material: band
+        stripes: {axis: z, at: [-0.30, -0.47, -0.62], width: 0.04}
+  petiole:
+    material: band
+    space: body
+    blend: 0.02
+    prims:
+      - sphere: {c: [0, -0.03, -0.17], r: 0.07}
+      - ellipsoid: {c: [0, 0.05, -0.17], r: [0.06, 0.09, 0.045]}
+  thorax:
+    material: ant
+    space: body
+    blend: 0.04
+    prims:
+      - ellipsoid: {c: [0, 0.01, 0.11], r: [0.17, 0.17, 0.19]}
+      - ellipsoid: {c: [0, -0.01, -0.05], r: [0.13, 0.13, 0.11]}
+  spines_L:
+    material: jaw
+    space: body
+    min_cover: 2
+    prims:
+      - cone: {a: [0.07, 0.13, 0.15], b: [0.13, 0.31, 0.08], r: [0.035, 0.008]}
+      - cone: {a: [0.06, 0.08, -0.07], b: [0.10, 0.23, -0.16], r: [0.03, 0.008]}
+  head:
+    material: ant
+    space: head
+    blend: 0.05
+    prims:
+      - ellipsoid: {c: [0, 0.05, 0.16], r: [0.27, 0.23, 0.25]}
+      - sphere: {c: [0.13, 0.16, 0.03], r: 0.16}
+      - sphere: {c: [-0.13, 0.16, 0.03], r: 0.16}
+      - ellipsoid: {c: [0, -0.07, 0.31], r: [0.16, 0.10, 0.10]}
+  mandible_L:
+    material: jaw
+    space: head
+    prims:
+      - cone: {a: [0.11, -0.10, 0.36], b: "[0.03 + 0.14*jaw_open, -0.16, 0.56 - 0.05*jaw_open]", r: [0.06, 0.02]}
+  eye_L:
+    material: eye
+    space: head
+    prims:
+      - sphere: {c: [0.215, 0.09, 0.29], r: 0.078}
+  antenna_L:
+    material: jaw
+    space: head
+    min_cover: 2
+    blend: 0.01
+    prims:
+      - cone: {a: [0.11, 0.22, 0.27], b: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", r: [0.03, 0.024]}
+      - cone: {a: "[0.27, 0.56 - 0.30*ant_droop, 0.36 + 0.10*ant_droop]", b: "[0.29 + 0.05*ant_sway, 0.44 + 0.06*ant_sway - 0.50*ant_droop, 0.64]", r: [0.024, 0.036]}
+  leg1_L:
+    material: leg
+    min_cover: 2
+    prims:
+      - cone: {a: "@hip1_L", b: "@knee1_L", r: [0.06, 0.045]}
+      - sphere: {c: "@knee1_L", r: 0.052}
+      - cone: {a: "@knee1_L", b: "@tip1_L", r: [0.04, 0.028]}
+      - sphere: {c: "@tip1_L", r: 0.036}
+  leg2_L:
+    material: leg
+    min_cover: 2
+    prims:
+      - cone: {a: "@hip2_L", b: "@knee2_L", r: [0.06, 0.045]}
+      - sphere: {c: "@knee2_L", r: 0.052}
+      - cone: {a: "@knee2_L", b: "@tip2_L", r: [0.04, 0.028]}
+      - sphere: {c: "@tip2_L", r: 0.036}
+  leg3_L:
+    material: leg
+    min_cover: 2
+    prims:
+      - cone: {a: "@hip3_L", b: "@knee3_L", r: [0.06, 0.045]}
+      - sphere: {c: "@knee3_L", r: 0.052}
+      - cone: {a: "@knee3_L", b: "@tip3_L", r: [0.04, 0.028]}
+      - sphere: {c: "@tip3_L", r: 0.036}
+
+animations:
+  idle:
+    frames: 6
+    ms: 160
+    channels:
+      bob: "0.012*sin(p)"
+      head_yaw: "0.10*sin(p)"
+      ant_sway: "sin(2*p)"
+      gaster_pitch: "0.04*sin(p - 0.8)"
+
+  walk:
+    frames: 8
+    ms: 85
+    events: {0: step_a, 4: step_b}
+    channels:
+      bob: "0.015*cos(2*p)"
+      roll: "0.04*sin(p)"
+      head_yaw: "0.06*cos(p)"
+      ant_sway: "sin(2*p)"
+      gaster_pitch: "0.05*sin(2*p)"
+      foot1_L: "[0.29, 0.09*pos(-sin(p)), 0.44 + 0.12*cos(p)]"
+      foot2_L: "[0.46, 0.09*pos(sin(p)),  0.08 - 0.12*cos(p)]"
+      foot3_L: "[0.34, 0.09*pos(-sin(p)), -0.28 + 0.12*cos(p)]"
+      foot1_R: "[0.29, 0.09*pos(sin(p)), 0.44 - 0.12*cos(p)]"
+      foot2_R: "[0.46, 0.09*pos(-sin(p)), 0.08 + 0.12*cos(p)]"
+      foot3_R: "[0.34, 0.09*pos(sin(p)),  -0.28 - 0.12*cos(p)]"
+
+  attack:
+    loop: false
+    keys:
+      - {ms: 90,  set: {jaw_open: 0.4}}
+      - {ms: 150, event: windup, set: {root: [0, 0, -0.14], pitch: -0.14, head_pitch: -0.30, jaw_open: 1, gaster_pitch: 0.12, bob: -0.03}}
+      - {ms: 60,  event: hit, set: {root: [0, 0, 0.06], pitch: 0.12, head_pitch: 0.22, jaw_open: 0, gaster_pitch: -0.15, bob: -0.02}}
+      - {ms: 110, set: {root: [0, 0, 0.04], pitch: 0.08, head_pitch: 0.15, jaw_open: 0.1, gaster_pitch: -0.08}}
+      - {ms: 130, set: {root: [0, 0, 0.01], jaw_open: 0.3}}
+
+  death:
+    loop: false
+    keys:
+      - {ms: 80,  set: {bob: 0.04, head_pitch: -0.25, jaw_open: 0.6}}
+      - {ms: 110, set: {bob: -0.09, head_pitch: 0.18, ant_droop: 0.4, jaw_open: 0.4,
+                        foot1_L: [0.38, 0, 0.49], foot2_L: [0.54, 0, 0.08], foot3_L: [0.42, 0, -0.34],
+                        foot1_R: [0.38, 0, 0.49], foot2_R: [0.54, 0, 0.08], foot3_R: [0.42, 0, -0.34]}}
+      - {ms: 130, set: {bob: -0.17, head_pitch: 0.34, ant_droop: 0.85, jaw_open: 0.2, gaster_pitch: -0.06,
+                        foot1_L: [0.44, 0, 0.53], foot2_L: [0.60, 0, 0.08], foot3_L: [0.48, 0, -0.38],
+                        foot1_R: [0.44, 0, 0.53], foot2_R: [0.60, 0, 0.08], foot3_R: [0.48, 0, -0.38]}}
+      - {ms: 300, set: {bob: -0.18, head_pitch: 0.40, ant_droop: 1, jaw_open: 0.15, gaster_pitch: -0.08,
+                        foot1_L: [0.45, 0, 0.54], foot2_L: [0.61, 0, 0.08], foot3_L: [0.49, 0, -0.39],
+                        foot1_R: [0.45, 0, 0.54], foot2_R: [0.61, 0, 0.08], foot3_R: [0.49, 0, -0.39]}}

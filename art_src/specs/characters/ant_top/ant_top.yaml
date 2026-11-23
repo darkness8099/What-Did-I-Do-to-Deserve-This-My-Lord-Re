@@ -1,0 +1,6 @@
+spritekiln: 1
+name: ant_top
+extends: ../ant/ant.yaml
+directions: [n, s]
+camera: {pitch: 90, scale: 0.036, center: [0, 0.40, 0.04]}
+shadow: null

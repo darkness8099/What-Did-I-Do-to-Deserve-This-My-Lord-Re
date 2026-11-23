@@ -76,6 +76,13 @@
 | **Space** / **Esc** | 重播自动演示 / 退出 |
 
 <details>
+<summary>🐜 预渲染像素素材预览（切叶蚁）</summary>
+
+在编辑器中打开 `scenes/ant_preview.tscn`，按 **F6** 运行。蚂蚁由 SpriteKiln 预渲染，和代码绘制的苔放在同一段通道里对比。**Z** 切换 64 / 80 / 48 px，**G** 显示一格范围，**Esc** 退出。素材源文件与重新渲染的方法见 `art_src/README.md`。
+
+</details>
+
+<details>
 <summary>🍄 运行上一轮动画实验</summary>
 
 在编辑器中打开 `scenes/creature_lab.tscn`，按 **F6** 运行当前场景。
